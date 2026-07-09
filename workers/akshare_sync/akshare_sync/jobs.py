@@ -1,7 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
+import re
 from typing import Callable
 
 import requests
@@ -63,6 +65,30 @@ def _safe_akshare_call(
         return pd.DataFrame()
 
 
+def _latest_daily_nav_columns(
+    columns: list[object],
+) -> list[tuple[str, str, str]]:
+    date_to_columns: dict[str, dict[str, str]] = {}
+    pattern = re.compile(r"^(\d{4}-\d{2}-\d{2})-(单位净值|累计净值)$")
+
+    for column in columns:
+        if not isinstance(column, str):
+            continue
+        match = pattern.match(column)
+        if not match:
+            continue
+        date_str, value_type = match.groups()
+        date_to_columns.setdefault(date_str, {})[value_type] = column
+
+    available_dates = sorted(date_to_columns.keys(), reverse=True)
+    return [
+        (date, cols["单位净值"], cols["累计净值"])
+        for date in available_dates
+        for cols in [date_to_columns[date]]
+        if "单位净值" in cols and "累计净值" in cols
+    ]
+
+
 def with_sync_log(
     client: SupabaseClient,
     task: str,
@@ -115,11 +141,11 @@ def sync_fund_basic(client: SupabaseClient, fund_codes: list[str]) -> int:
         rows.append(
             {
                 "fund_code": code,
-                "fund_name": first_value(name_row, ["基金简称", "基金名称", "name"])
-                or first_value(overview_row, ["基金简称", "基金名称"]),
+                "fund_name": first_value(name_row, ["基金名称", "基金简称", "name"])
+                or first_value(overview_row, ["基金名称", "基金简称"]),
                 "fund_type": first_value(name_row, ["基金类型", "类型"])
                 or first_value(overview_row, ["基金类型", "基金类别"]),
-                "manager": first_value(overview_row, ["基金经理", "现任基金经理"]),
+                "manager": first_value(overview_row, ["基金经理", "管理人"]),
                 "company": first_value(overview_row, ["基金管理人", "基金公司", "管理人"]),
                 "data_source": "akshare:fund_name_em,fund_overview_em",
                 "last_synced_at": synced_at,
@@ -135,6 +161,9 @@ def sync_fund_basic(client: SupabaseClient, fund_codes: list[str]) -> int:
 def sync_latest_nav(client: SupabaseClient, fund_codes: list[str] | None) -> int:
     df = ak.fund_open_fund_daily_em()
     synced_at = now_iso()
+    nav_columns = _latest_daily_nav_columns(df.columns.tolist())
+    if not nav_columns:
+        return client.upsert("fund_navs", [], "fund_code,nav_date")
     rows: list[dict] = []
     wanted = (
         {normalize_fund_code(code) for code in fund_codes}
@@ -146,20 +175,37 @@ def sync_latest_nav(client: SupabaseClient, fund_codes: list[str] | None) -> int
         code = normalize_fund_code(first_value(row, ["基金代码", "代码", "fund_code"]))
         if wanted is not None and code not in wanted:
             continue
-        nav_date = to_date(first_value(row, ["净值日期", "日期"]))
-        if not nav_date:
+
+        selected_nav_date: str | None = None
+        selected_nav: float | None = None
+        selected_accumulated_nav: float | None = None
+
+        for nav_date_candidate, nav_col, accumulated_nav_col in nav_columns:
+            nav = to_float(first_value(row, [nav_col]))
+            accumulated_nav = to_float(first_value(row, [accumulated_nav_col]))
+            if nav is not None or accumulated_nav is not None:
+                selected_nav_date = nav_date_candidate
+                selected_nav = nav
+                selected_accumulated_nav = accumulated_nav
+                break
+
+        if not selected_nav_date:
             continue
+        parsed_nav_date = to_date(selected_nav_date)
+        if not parsed_nav_date:
+            continue
+
         rows.append(
             {
                 "fund_code": code,
-                "nav_date": nav_date,
-                "nav": to_float(first_value(row, ["单位净值", "最新净值"])),
-                "accumulated_nav": to_float(first_value(row, ["累计净值"])),
+                "nav_date": parsed_nav_date,
+                "nav": selected_nav,
+                "accumulated_nav": selected_accumulated_nav,
                 "nav_change_pct": to_float(first_value(row, ["日增长率", "增长率"])),
                 "data_source": "akshare:fund_open_fund_daily_em",
                 "last_synced_at": synced_at,
             }
-        )
+    )
 
     ensure_funds(client, [row["fund_code"] for row in rows])
     return client.upsert("fund_navs", rows, "fund_code,nav_date")
@@ -180,7 +226,8 @@ def sync_nav_history(client: SupabaseClient, fund_codes: list[str]) -> int:
                 {
                     "fund_code": code,
                     "nav_date": nav_date,
-                    "nav": to_float(first_value(row, ["单位净值", "净值"])),
+                    "nav": to_float(first_value(row, ["单位净值", "最新净值"])),
+                    "accumulated_nav": to_float(first_value(row, ["累计净值"])),
                     "nav_change_pct": to_float(first_value(row, ["日增长率", "涨跌幅"])),
                     "data_source": "akshare:fund_open_fund_info_em",
                     "last_synced_at": synced_at,
@@ -190,14 +237,14 @@ def sync_nav_history(client: SupabaseClient, fund_codes: list[str]) -> int:
     ensure_funds(client, [row["fund_code"] for row in rows])
     return client.upsert("fund_navs", rows, "fund_code,nav_date")
 
-
 def sync_stock_holdings(client: SupabaseClient, fund_codes: list[str]) -> int:
     rows: list[dict] = []
     synced_at = now_iso()
 
     for fund_code in fund_codes:
         code = normalize_fund_code(fund_code)
-        df = ak.fund_portfolio_hold_em(symbol=code)
+        current_year = str(datetime.now().year)
+        df = ak.fund_portfolio_hold_em(symbol=code, date=current_year)
         for _, row in df.iterrows():
             symbol = normalize_symbol(first_value(row, ["股票代码", "代码", "证券代码"]))
             report_period = str(first_value(row, ["季度", "报告期", "持仓季度"]) or "")
@@ -211,17 +258,20 @@ def sync_stock_holdings(client: SupabaseClient, fund_codes: list[str]) -> int:
                     "market": "CN",
                     "symbol": symbol,
                     "name": first_value(row, ["股票名称", "名称", "证券名称"]),
-                    "weight_pct": to_float(first_value(row, ["占净值比例", "持仓占比", "占比"])) or 0,
-                    "shares": to_float(first_value(row, ["持股数", "持仓数量"])),
-                    "market_value": to_float(first_value(row, ["持仓市值", "市值"])),
+                    "weight_pct": to_float(first_value(row, ["占净值比例", "持仓占净值比例", "占净值"])) or 0,
+                    "shares": to_float(first_value(row, ["持仓数", "持仓份额", "持仓股票数", "份额"])),
+                    "market_value": to_float(
+                        first_value(row, ["持仓市值（万元）", "持仓市值", "市值（万元）", "市值"])
+                    ),
                     "data_source": "akshare:fund_portfolio_hold_em",
-                    "source_report_date": to_date(first_value(row, ["报告日期", "公告日期"])),
+                    "source_report_date": to_date(
+                        first_value(row, ["报告日期", "估算日期", "更新日期"])
+                    ),
                     "last_synced_at": synced_at,
                 }
             )
 
     return client.upsert("fund_holdings", rows, "fund_code,report_period,symbol")
-
 
 def sync_bond_holdings(client: SupabaseClient, fund_codes: list[str]) -> int:
     rows: list[dict] = []
@@ -229,7 +279,14 @@ def sync_bond_holdings(client: SupabaseClient, fund_codes: list[str]) -> int:
 
     for fund_code in fund_codes:
         code = normalize_fund_code(fund_code)
-        df = ak.fund_portfolio_bond_hold_em(symbol=code)
+        current_year = str(datetime.now().year)
+        try:
+            df = ak.fund_portfolio_bond_hold_em(symbol=code, date=current_year)
+        except (RequestException, KeyError, ValueError):
+            continue
+
+        if df.empty:
+            continue
         for _, row in df.iterrows():
             symbol = normalize_symbol(first_value(row, ["债券代码", "代码", "证券代码"]))
             report_period = str(first_value(row, ["季度", "报告期", "持仓季度"]) or "")
@@ -243,16 +300,19 @@ def sync_bond_holdings(client: SupabaseClient, fund_codes: list[str]) -> int:
                     "market": "CN",
                     "symbol": symbol,
                     "name": first_value(row, ["债券名称", "名称", "证券名称"]),
-                    "weight_pct": to_float(first_value(row, ["占净值比例", "持仓占比", "占比"])) or 0,
-                    "market_value": to_float(first_value(row, ["持仓市值", "市值"])),
+                    "weight_pct": to_float(first_value(row, ["占净值比例", "持仓占净值比例", "占净值"])) or 0,
+                    "market_value": to_float(
+                        first_value(row, ["持仓市值（万元）", "持仓市值", "市值（万元）", "市值"])
+                    ),
                     "data_source": "akshare:fund_portfolio_bond_hold_em",
-                    "source_report_date": to_date(first_value(row, ["报告日期", "公告日期"])),
+                    "source_report_date": to_date(
+                        first_value(row, ["报告日期", "估算日期", "更新日期"])
+                    ),
                     "last_synced_at": synced_at,
                 }
             )
 
     return client.upsert("fund_holdings", rows, "fund_code,report_period,symbol")
-
 
 def sync_asset_allocations(client: SupabaseClient, fund_codes: list[str]) -> int:
     rows: list[dict] = []
@@ -263,7 +323,7 @@ def sync_asset_allocations(client: SupabaseClient, fund_codes: list[str]) -> int
         df = ak.fund_individual_detail_hold_xq(symbol=code)
         for _, row in df.iterrows():
             report_period = str(first_value(row, ["报告期", "日期", "季度"]) or "")
-            asset_type = str(first_value(row, ["资产类型", "项目", "类别"]) or "").strip()
+            asset_type = str(first_value(row, ["资产类别", "行业", "类型"]) or "").strip()
             if not report_period or not asset_type:
                 continue
             rows.append(
@@ -271,8 +331,10 @@ def sync_asset_allocations(client: SupabaseClient, fund_codes: list[str]) -> int
                     "fund_code": code,
                     "report_period": report_period,
                     "asset_type": asset_type,
-                    "weight_pct": to_float(first_value(row, ["占比", "比例", "占净值比例"])) or 0,
-                    "amount": to_float(first_value(row, ["金额", "市值"])),
+                    "weight_pct": to_float(first_value(row, ["占净值比例", "持仓占净值比例", "占净值"])) or 0,
+                    "amount": to_float(
+                        first_value(row, ["持仓市值（万元）", "持仓市值", "市值（万元）"])
+                    ),
                     "data_source": "akshare:fund_individual_detail_hold_xq",
                     "source_report_date": to_date(report_period),
                     "last_synced_at": synced_at,
@@ -285,15 +347,6 @@ def sync_asset_allocations(client: SupabaseClient, fund_codes: list[str]) -> int
         rows,
         "fund_code,report_period,asset_type",
     )
-
-
-def sync_fund_disclosures(client: SupabaseClient, fund_codes: list[str]) -> int:
-    return (
-        sync_stock_holdings(client, fund_codes)
-        + sync_bond_holdings(client, fund_codes)
-        + sync_asset_allocations(client, fund_codes)
-    )
-
 
 def sync_market_quotes(client: SupabaseClient, market: str) -> int:
     df = {
@@ -312,10 +365,12 @@ def sync_market_quotes(client: SupabaseClient, market: str) -> int:
             {
                 "market": market,
                 "symbol": symbol,
-                "name": first_value(row, ["名称", "股票名称", "中文名称"]),
+                "name": first_value(row, ["名称", "股票名称", "简称"]),
                 "price": to_float(first_value(row, ["最新价", "现价", "价格"])),
-                "previous_close": to_float(first_value(row, ["昨收", "昨收价"])),
-                "change_pct": to_float(first_value(row, ["涨跌幅", "change_pct"])),
+                "previous_close": to_float(first_value(row, ["昨收", "前收", "昨收盘"])),
+                "change_pct": to_float(
+                    first_value(row, ["涨跌幅", "涨跌幅(%)", "change_pct"])
+                ),
                 "currency": {"CN": "CNY", "HK": "HKD", "US": "USD"}[market],
                 "quote_time": synced_at,
                 "data_source": f"akshare:{_quote_function_name(market)}",
@@ -324,7 +379,6 @@ def sync_market_quotes(client: SupabaseClient, market: str) -> int:
         )
 
     return client.upsert("market_quotes", rows, "market,symbol")
-
 
 def recalculate_estimates(
     client: SupabaseClient,
@@ -440,3 +494,12 @@ def _safe_overview(fund_code: str) -> pd.DataFrame:
             f"fund_overview_em(fund={fund_code})",
             lambda: ak.fund_overview_em(fund=fund_code),
         )
+
+
+
+
+
+
+
+
+
