@@ -1,6 +1,6 @@
-import Link from "next/link"
-
 import { Button } from "@workspace/ui/components/button"
+
+import { PendingLink } from "@/components/pending-link"
 
 import type { Locale } from "./dictionaries"
 
@@ -35,7 +35,7 @@ export function LanguageSwitcher({
           nativeButton={false}
           size="sm"
           variant={item.locale === currentLocale ? "secondary" : "ghost"}
-          render={<Link href={`/${item.locale}${normalizedPath}`} />}
+          render={<PendingLink href={`/${item.locale}${normalizedPath}`} />}
         >
           {item.label}
         </Button>

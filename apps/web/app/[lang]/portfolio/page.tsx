@@ -1,15 +1,23 @@
-import { Button } from "@workspace/ui/components/button"
-
 import { AppShell } from "@/components/app-shell"
-import { DataCard } from "@/components/data-card"
 import { EmptyState } from "@/components/empty-state"
-import { ChangeBadge } from "@/components/finance/change-badge"
-import { MoneyText } from "@/components/finance/money-text"
-import { MetricCard } from "@/components/metric-card"
+import { ErrorState } from "@/components/error-state"
+import {
+  PortfolioSummary,
+  type PortfolioFundItem,
+} from "@/components/portfolio-summary"
 import { PageHeader } from "@/components/page-header"
 import { RiskNotice } from "@/components/risk-notice"
+import { estimateFundDailyChange } from "@/lib/services/estimate-service"
+import { getTrackedFunds } from "@/lib/services/fund-service"
+import { getUserPositions } from "@/lib/services/portfolio-service"
+import type { Database } from "@/lib/supabase/types"
 
 import { getDictionary, getShellLabels, hasLocale } from "../dictionaries"
+
+type TrackedFund = Database["public"]["Tables"]["tracked_funds"]["Row"]
+type UserPosition = Database["public"]["Tables"]["user_positions"]["Row"]
+
+export const dynamic = "force-dynamic"
 
 export default async function PortfolioPage({
   params,
@@ -23,6 +31,17 @@ export default async function PortfolioPage({
   }
 
   const dict = getDictionary(lang)
+  const [fundsResponse, positionsResponse] = await Promise.all([
+    getTrackedFunds(null),
+    getUserPositions(null),
+  ])
+
+  const hasLoadError = !fundsResponse.ok || !positionsResponse.ok
+  const funds = fundsResponse.ok ? dedupeFunds(fundsResponse.data) : []
+  const positions = positionsResponse.ok ? positionsResponse.data : []
+  const items = hasLoadError
+    ? []
+    : await buildPortfolioItems(funds, positions)
 
   return (
     <AppShell
@@ -35,55 +54,73 @@ export default async function PortfolioPage({
         <PageHeader
           title={dict.portfolio.title}
           description={dict.portfolio.description}
-          action={
-            <Button variant="outline">{dict.portfolio.adjustView}</Button>
-          }
         />
         <RiskNotice
           title={dict.riskNotice.title}
           description={dict.riskNotice.description}
         />
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <MetricCard
-            title={dict.portfolio.marketValue}
-            value={<MoneyText value={128_430_000} compact />}
-            description={dict.portfolio.marketValueDescription}
-            trend={<ChangeBadge value={0.0128} />}
+        {hasLoadError ? (
+          <ErrorState
+            title={dict.portfolio.loadErrorTitle}
+            description={dict.portfolio.loadErrorDescription}
           />
-          <MetricCard
-            title={dict.portfolio.equityExposure}
-            value="62%"
-            description={dict.portfolio.equityExposureDescription}
+        ) : items.length === 0 ? (
+          <EmptyState
+            title={dict.portfolio.emptyTitle}
+            description={dict.portfolio.emptyDescription}
           />
-          <MetricCard
-            title={dict.portfolio.fundCount}
-            value="6"
-            description={dict.portfolio.sampleData}
-          />
-        </section>
-
-        <DataCard
-          title={dict.portfolio.distributionTitle}
-          description={dict.portfolio.distributionDescription}
-        >
-          <div className="grid gap-3 md:grid-cols-3">
-            {dict.portfolio.distribution.map(([label, value]) => (
-              <div key={label} className="rounded-md border p-4">
-                <div className="text-xs text-muted-foreground">{label}</div>
-                <div className="mt-2 text-2xl font-medium tabular-nums">
-                  {value}
-                </div>
-              </div>
-            ))}
-          </div>
-        </DataCard>
-
-        <EmptyState
-          title={dict.portfolio.emptyTitle}
-          description={dict.portfolio.emptyDescription}
-        />
+        ) : (
+          <PortfolioSummary items={items} labels={dict.portfolio} />
+        )}
       </div>
     </AppShell>
   )
+}
+
+async function buildPortfolioItems(
+  funds: TrackedFund[],
+  positions: UserPosition[],
+): Promise<PortfolioFundItem[]> {
+  const positionMap = new Map(
+    positions.map((position) => [position.fund_code, position]),
+  )
+
+  return Promise.all(
+    funds.map(async (fund) => {
+      const position = positionMap.get(fund.fund_code)
+      const holdingAmount = Number(position?.holding_amount ?? 0)
+      const estimateResponse = await estimateFundDailyChange(fund.fund_code)
+      const estimatedChangePct = estimateResponse.ok
+        ? estimateResponse.data.estimatedChangePct
+        : 0
+
+      return {
+        fundCode: fund.fund_code,
+        fundName: fund.fund_name,
+        fundType: fund.fund_type,
+        position: {
+          holdingAmount,
+          holdingShares: Number(position?.holding_shares ?? 0),
+          costAmount: Number(position?.cost_amount ?? 0),
+          dailyInvestAmount: Number(position?.daily_invest_amount ?? 0),
+          note: position?.note ?? null,
+        },
+        estimate: {
+          estimatedChangePct,
+          estimatedProfitAmount: (holdingAmount * estimatedChangePct) / 100,
+        },
+      }
+    }),
+  )
+}
+
+function dedupeFunds(funds: TrackedFund[]) {
+  const deduped = new Map<string, TrackedFund>()
+
+  for (const fund of funds) {
+    deduped.set(fund.fund_code, fund)
+  }
+
+  return Array.from(deduped.values())
 }

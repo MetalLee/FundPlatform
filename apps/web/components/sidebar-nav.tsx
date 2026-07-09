@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils/cn"
+import { PendingLink } from "@/components/pending-link"
 
 const navItems = [
   {
@@ -60,9 +60,10 @@ export function SidebarNav({ lang, labels, className }: SidebarNavProps) {
         const Icon = item.icon
 
         return (
-          <Link
+          <PendingLink
             key={item.href}
             href={href}
+            showSpinner
             className={cn(
               "flex h-8 items-center gap-2 rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
               isActive && "bg-muted text-foreground",
@@ -70,7 +71,7 @@ export function SidebarNav({ lang, labels, className }: SidebarNavProps) {
           >
             <Icon className="size-4" />
             <span>{labels[item.key]}</span>
-          </Link>
+          </PendingLink>
         )
       })}
     </nav>
@@ -87,7 +88,10 @@ export function SidebarBrand({
   subtitle: string
 }) {
   return (
-    <Link href={`/${lang}/dashboard`} className="flex items-center gap-2">
+    <PendingLink
+      href={`/${lang}/dashboard`}
+      className="flex items-center gap-2"
+    >
       <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
         <BarChart3 className="size-4" />
       </div>
@@ -95,6 +99,6 @@ export function SidebarBrand({
         <div className="text-sm font-medium">{appName}</div>
         <div className="text-[0.625rem] text-muted-foreground">{subtitle}</div>
       </div>
-    </Link>
+    </PendingLink>
   )
 }

@@ -1,25 +1,15 @@
-import Link from "next/link"
-import { ArrowRight, Plus } from "lucide-react"
-
-import { Badge } from "@workspace/ui/components/badge"
-import { Button } from "@workspace/ui/components/button"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@workspace/ui/components/table"
-
 import { AppShell } from "@/components/app-shell"
-import { DataCard } from "@/components/data-card"
-import { ChangeBadge } from "@/components/finance/change-badge"
-import { MoneyText } from "@/components/finance/money-text"
+import { EmptyState } from "@/components/empty-state"
+import { ErrorState } from "@/components/error-state"
+import { FundCard } from "@/components/fund-card"
+import { FundSearchAdd } from "@/components/fund-search-add"
 import { PageHeader } from "@/components/page-header"
 import { RiskNotice } from "@/components/risk-notice"
+import { getTrackedFunds } from "@/lib/services/fund-service"
 
 import { getDictionary, getShellLabels, hasLocale } from "../dictionaries"
+
+export const dynamic = "force-dynamic"
 
 export default async function FundsPage({
   params,
@@ -33,6 +23,7 @@ export default async function FundsPage({
   }
 
   const dict = getDictionary(lang)
+  const trackedFundsResponse = await getTrackedFunds(null)
 
   return (
     <AppShell
@@ -45,71 +36,64 @@ export default async function FundsPage({
         <PageHeader
           title={dict.funds.title}
           description={dict.funds.description}
-          action={
-            <Button>
-              <Plus className="size-4" />
-              {dict.funds.addFund}
-            </Button>
-          }
         />
+
         <RiskNotice
           title={dict.riskNotice.title}
           description={dict.riskNotice.description}
         />
 
-        <DataCard
-          title={dict.funds.allFundsTitle}
-          description={dict.funds.allFundsDescription}
-        >
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{dict.funds.table.name}</TableHead>
-                <TableHead>{dict.funds.table.type}</TableHead>
-                <TableHead>{dict.funds.table.asset}</TableHead>
-                <TableHead>{dict.funds.table.status}</TableHead>
-                <TableHead className="text-right">
-                  {dict.funds.table.change}
-                </TableHead>
-                <TableHead className="text-right">
-                  {dict.funds.table.action}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {dict.funds.list.map((fund) => (
-                <TableRow key={fund.code}>
-                  <TableCell>
-                    <div className="font-medium">{fund.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {fund.code}
-                    </div>
-                  </TableCell>
-                  <TableCell>{fund.type}</TableCell>
-                  <TableCell>
-                    <MoneyText value={fund.asset} compact />
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{fund.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <ChangeBadge value={fund.change} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      nativeButton={false}
-                      variant="ghost"
-                      render={<Link href={`/${lang}/funds/${fund.code}`} />}
-                    >
-                      {dict.funds.detail}
-                      <ArrowRight className="size-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
+        <FundSearchAdd
+          labels={{
+            title: dict.funds.addFundTitle,
+            description: dict.funds.addFundDescription,
+            fundCodeLabel: dict.funds.fundCodeLabel,
+            placeholder: dict.funds.fundCodePlaceholder,
+            addFund: dict.funds.addFund,
+            adding: dict.funds.adding,
+            addSuccess: dict.funds.addSuccess,
+            invalidFundCode: dict.funds.invalidFundCode,
+            requestFailed: dict.funds.requestFailed,
+          }}
+        />
+
+        <section className="space-y-4">
+          <div className="space-y-1">
+            <h2 className="text-lg font-medium">{dict.funds.allFundsTitle}</h2>
+            <p className="text-sm text-muted-foreground">
+              {dict.funds.allFundsDescription}
+            </p>
+          </div>
+
+          {!trackedFundsResponse.ok ? (
+            <ErrorState
+              title={dict.funds.loadErrorTitle}
+              description={dict.funds.loadErrorDescription}
+            />
+          ) : trackedFundsResponse.data.length === 0 ? (
+            <EmptyState
+              title={dict.funds.emptyTitle}
+              description={dict.funds.emptyDescription}
+            />
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {trackedFundsResponse.data.map((fund) => (
+                <FundCard
+                  key={`${fund.user_id ?? "mock"}-${fund.fund_code}`}
+                  fund={fund}
+                  lang={lang}
+                  labels={{
+                    fields: dict.funds.fields,
+                    viewDetail: dict.funds.viewDetail,
+                    sync: dict.funds.sync,
+                    syncing: dict.funds.syncing,
+                    requestFailed: dict.funds.requestFailed,
+                  }}
+                />
               ))}
-            </TableBody>
-          </Table>
-        </DataCard>
+            </div>
+          )}
+        </section>
       </div>
     </AppShell>
   )

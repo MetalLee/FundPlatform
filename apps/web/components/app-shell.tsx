@@ -74,7 +74,9 @@ export function AppShell({
               className="flex-row overflow-x-auto pb-1"
             />
           </div>
-          <main className="flex-1 px-4 py-6 lg:px-6">{children}</main>
+          <main className="flex-1 px-4 py-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200 lg:px-6">
+            {children}
+          </main>
         </div>
       </div>
     </div>

@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { ArrowRight, BarChart3, ShieldCheck, WalletCards } from "lucide-react"
 
 import { Badge } from "@workspace/ui/components/badge"
@@ -13,6 +12,7 @@ import {
 
 import { getDictionary, hasLocale } from "./dictionaries"
 import { LanguageSwitcher } from "./language-switcher"
+import { PendingLink } from "@/components/pending-link"
 
 const snapshotIcons = [WalletCards, BarChart3, ShieldCheck]
 
@@ -48,7 +48,7 @@ export default async function Page({
             <Button
               nativeButton={false}
               variant="outline"
-              render={<Link href={`/${lang}/dashboard`} />}
+              render={<PendingLink href={`/${lang}/dashboard`} />}
             >
               {dict.common.dashboard}
               <ArrowRight />
@@ -73,12 +73,17 @@ export default async function Page({
               <Button
                 nativeButton={false}
                 size="lg"
-                render={<Link href={`/${lang}/dashboard`} />}
+                render={<PendingLink href={`/${lang}/dashboard`} />}
               >
                 {dict.home.openDashboard}
                 <ArrowRight />
               </Button>
-              <Button size="lg" variant="outline">
+              <Button
+                nativeButton={false}
+                size="lg"
+                variant="outline"
+                render={<PendingLink href={`/${lang}/funds`} />}
+              >
                 {dict.home.reviewFunds}
               </Button>
             </div>
