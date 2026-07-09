@@ -2,7 +2,9 @@ import {
   badRequest,
   fromServiceResponse,
   internalError,
+  unauthorized,
 } from "@/lib/api/route-response"
+import { getCurrentUserId } from "@/lib/auth/server"
 import { getFundDetail } from "@/lib/services/fund-service"
 import { normalizeFundCode } from "@/lib/utils/code-normalizer"
 
@@ -12,7 +14,13 @@ export async function GET(
 ) {
   try {
     const { fundCode } = await params
-    const result = await getFundDetail(null, normalizeFundCode(fundCode))
+    const userId = await getCurrentUserId()
+
+    if (!userId) {
+      return unauthorized()
+    }
+
+    const result = await getFundDetail(userId, normalizeFundCode(fundCode))
 
     return fromServiceResponse(result)
   } catch (error) {

@@ -20,6 +20,7 @@ const zh = {
     mockDataDescription: "当前界面仅展示静态数据，用于验证应用布局与基础组件。",
     search: "搜索",
     notifications: "通知",
+    signOut: "退出登录",
     nav: {
       dashboard: "仪表盘",
       funds: "基金",
@@ -28,13 +29,37 @@ const zh = {
       settings: "设置",
     },
     titles: {
-      dashboard: "Dashboard",
-      funds: "Funds",
-      fundDetail: "Fund Detail",
-      portfolio: "Portfolio",
-      insights: "Insights",
-      settings: "Settings",
+      dashboard: "仪表盘",
+      funds: "基金",
+      fundDetail: "基金详情",
+      portfolio: "组合",
+      insights: "洞察",
+      settings: "设置",
     },
+  },
+  auth: {
+    loginTitle: "登录",
+    loginDescription: "使用已确认邮箱进入基金工作区。",
+    registerTitle: "注册",
+    registerDescription: "创建账户后，请先完成邮箱确认再进入应用。",
+    email: "邮箱",
+    password: "密码",
+    confirmPassword: "确认密码",
+    login: "登录",
+    register: "注册",
+    loggingIn: "登录中",
+    registering: "注册中",
+    goToLogin: "已有账户？登录",
+    goToRegister: "没有账户？注册",
+    checkEmailTitle: "请确认邮箱",
+    checkEmailDescription:
+      "我们已发送确认邮件。完成确认后即可登录并访问应用数据页。",
+    invalidEmail: "请输入有效邮箱。",
+    passwordTooShort: "密码至少需要 6 个字符。",
+    passwordMismatch: "两次输入的密码不一致。",
+    requestFailed: "认证请求失败，请稍后重试。",
+    unconfirmed:
+      "邮箱尚未确认。请先打开确认邮件完成验证，然后再登录。",
   },
   riskNotice: {
     title: "风险提示",
@@ -69,6 +94,10 @@ const zh = {
     chartTitle: "组合趋势",
     chartDescription: "预留后续收益率曲线和风险暴露图表。",
     chartPlaceholder: "图表区域",
+    freshnessTitle: "数据新鲜度",
+    freshnessDescription: "展示 GitHub Actions worker 写入 Supabase 缓存后的最近同步信息。",
+    freshnessLastSyncedAt: "最后同步时间",
+    freshnessDataSource: "数据源",
     metrics: {
       holdingAmount: "组合总持仓金额",
       costAmount: "组合总成本",
@@ -129,6 +158,7 @@ const zh = {
       latestNavDate: "净值日期",
       latestNavChange: "净值涨跌",
       lastSyncedAt: "最后同步时间",
+      dataSource: "数据源",
       unknown: "暂无",
     },
     detail: "详情",
@@ -198,6 +228,13 @@ const zh = {
       warnings: "估算限制",
       noWarnings: "暂无风险提示",
       noEstimate: "暂无估算快照",
+      dataMissing: "公共数据尚未同步，请等待 GitHub Actions worker 写入缓存。",
+      dataStale: "公共数据可能已过期，请检查最近一次 worker 同步时间。",
+      quoteStale: "行情缓存已过期，估算仍使用最近一次可用行情。",
+      holdingStale: "公开披露持仓已过期，估算仍使用最近一次可用持仓。",
+      lowCoverage: "公开持仓覆盖比例不足，估算解释力有限。",
+      workerFailed: "最近一次 worker 同步失败，请查看 data_sync_logs 审计日志。",
+      workerStale: "worker 已长时间未运行，请检查 GitHub Actions schedule。",
     },
     holdings: {
       title: "公开披露持仓",
@@ -245,7 +282,11 @@ const zh = {
       estimatedChange: "估算今日涨跌幅",
     },
     positionsTitle: "基金持仓",
-    positionsDescription: "保存后会写入 user_positions，刷新页面后仍会保留。",
+    positionsDescription:
+      "持仓金额、份额和成本保存到 user_positions；每日定投金额保存到 user_investment_plans。",
+    planNoticeTitle: "每日定投计划",
+    planNoticeDescription:
+      "每日定投金额仅作为计划展示，不会自动生成真实申购订单，也不会自动增加持仓金额、成本或份额。",
     fields: {
       holdingAmount: "当前持有金额",
       holdingShares: "当前持有份额",
@@ -336,6 +377,7 @@ const en: typeof zh = {
       "This interface uses static data only to validate layout and base components.",
     search: "Search",
     notifications: "Notifications",
+    signOut: "Sign out",
     nav: {
       dashboard: "Dashboard",
       funds: "Funds",
@@ -351,6 +393,31 @@ const en: typeof zh = {
       insights: "Insights",
       settings: "Settings",
     },
+  },
+  auth: {
+    loginTitle: "Log in",
+    loginDescription: "Use a confirmed email address to enter your fund workspace.",
+    registerTitle: "Register",
+    registerDescription:
+      "Create an account, then confirm your email before entering the app.",
+    email: "Email",
+    password: "Password",
+    confirmPassword: "Confirm password",
+    login: "Log in",
+    register: "Register",
+    loggingIn: "Logging in",
+    registering: "Registering",
+    goToLogin: "Already have an account? Log in",
+    goToRegister: "No account yet? Register",
+    checkEmailTitle: "Check your email",
+    checkEmailDescription:
+      "We sent a confirmation email. After confirming it, you can log in and access app data pages.",
+    invalidEmail: "Enter a valid email.",
+    passwordTooShort: "Password must be at least 6 characters.",
+    passwordMismatch: "Passwords do not match.",
+    requestFailed: "Authentication request failed. Try again later.",
+    unconfirmed:
+      "Email is not confirmed yet. Open the confirmation email first, then log in.",
   },
   riskNotice: {
     title: "Risk notice",
@@ -389,6 +456,11 @@ const en: typeof zh = {
     chartDescription:
       "Placeholder for future return curve and risk exposure charts.",
     chartPlaceholder: "Chart area",
+    freshnessTitle: "Data freshness",
+    freshnessDescription:
+      "Shows the latest Supabase cache sync written by the GitHub Actions worker.",
+    freshnessLastSyncedAt: "Last synced",
+    freshnessDataSource: "Data source",
     metrics: {
       holdingAmount: "Total holding amount",
       costAmount: "Total cost",
@@ -454,6 +526,7 @@ const en: typeof zh = {
       latestNavDate: "NAV date",
       latestNavChange: "NAV change",
       lastSyncedAt: "Last synced",
+      dataSource: "Data source",
       unknown: "N/A",
     },
     detail: "Details",
@@ -525,6 +598,20 @@ const en: typeof zh = {
       warnings: "Estimate limits",
       noWarnings: "No warnings",
       noEstimate: "No estimate snapshot",
+      dataMissing:
+        "Shared data has not been synced yet. Wait for the GitHub Actions worker to write the cache.",
+      dataStale:
+        "Shared data may be stale. Check the most recent worker sync time.",
+      quoteStale:
+        "Market quotes are stale. Estimates still use the latest available quotes.",
+      holdingStale:
+        "Public holdings are stale. Estimates still use the latest available holdings.",
+      lowCoverage:
+        "Public holding coverage is low, so the estimate has limited explanatory power.",
+      workerFailed:
+        "The latest worker sync failed. Check the data_sync_logs audit trail.",
+      workerStale:
+        "The worker has not run recently. Check the GitHub Actions schedule.",
     },
     holdings: {
       title: "Public holdings",
@@ -577,7 +664,10 @@ const en: typeof zh = {
     },
     positionsTitle: "Fund positions",
     positionsDescription:
-      "Saved values are written to user_positions and persist after refresh.",
+      "Holding amount, shares, and cost are saved to user_positions. Daily investment amount is saved to user_investment_plans.",
+    planNoticeTitle: "Daily investment plan",
+    planNoticeDescription:
+      "The daily investment amount is display-only planning. It does not create real subscription orders and never automatically increases holding amount, cost, or shares.",
     fields: {
       holdingAmount: "Holding amount",
       holdingShares: "Holding shares",

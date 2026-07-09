@@ -1,4 +1,4 @@
-import { Bell, Search } from "lucide-react"
+import { Bell, LogOut, Search } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 
@@ -14,6 +14,7 @@ type TopBarProps = {
     brandSubtitle: string
     search: string
     notifications: string
+    signOut: string
     language: string
     chinese: string
     english: string
@@ -35,6 +36,16 @@ export function TopBar({ lang, path, labels }: TopBarProps) {
         <Button size="icon" variant="ghost" aria-label={labels.notifications}>
           <Bell className="size-4" />
         </Button>
+        <form action={`/auth/signout?lang=${lang}`} method="post">
+          <Button
+            size="icon"
+            variant="ghost"
+            type="submit"
+            aria-label={labels.signOut}
+          >
+            <LogOut className="size-4" />
+          </Button>
+        </form>
         <LanguageSwitcher
           currentLocale={lang}
           path={path}

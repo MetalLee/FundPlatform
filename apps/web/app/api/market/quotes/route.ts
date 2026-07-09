@@ -2,9 +2,11 @@ import {
   badRequest,
   fromServiceResponse,
   internalError,
+  unauthorized,
 } from "@/lib/api/route-response"
+import { getCurrentUserId } from "@/lib/auth/server"
 import {
-  syncQuotesForSymbols,
+  getCachedQuotesForSymbols,
   type QuoteRequestItem,
 } from "@/lib/services/market-service"
 
@@ -14,6 +16,12 @@ type QuotesRequest = {
 
 export async function POST(request: Request) {
   try {
+    const userId = await getCurrentUserId()
+
+    if (!userId) {
+      return unauthorized()
+    }
+
     const body = (await request.json()) as QuotesRequest
 
     if (!Array.isArray(body.items)) {
@@ -41,7 +49,7 @@ export async function POST(request: Request) {
       })
     }
 
-    return fromServiceResponse(await syncQuotesForSymbols(items))
+    return fromServiceResponse(await getCachedQuotesForSymbols(items))
   } catch (error) {
     if (error instanceof SyntaxError) {
       return badRequest("INVALID_JSON", "Request body must be valid JSON")

@@ -3,7 +3,9 @@ import {
   badRequest,
   fromServiceResponse,
   internalError,
+  unauthorized,
 } from "@/lib/api/route-response"
+import { getCurrentUserId } from "@/lib/auth/server"
 import { normalizeFundCode } from "@/lib/utils/code-normalizer"
 
 type AddFundRequest = {
@@ -19,7 +21,13 @@ export async function POST(request: Request) {
     }
 
     const fundCode = normalizeFundCode(body.fundCode)
-    const result = await addTrackedFund(null, fundCode)
+    const userId = await getCurrentUserId()
+
+    if (!userId) {
+      return unauthorized()
+    }
+
+    const result = await addTrackedFund(userId, fundCode)
 
     return fromServiceResponse(result, 201)
   } catch (error) {

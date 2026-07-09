@@ -4,6 +4,7 @@ import { FundCard } from "@/components/fund-card"
 import { FundSearchAdd } from "@/components/fund-search-add"
 import { PageHeader } from "@/components/page-header"
 import { RiskNotice } from "@/components/risk-notice"
+import { requireCurrentUser } from "@/lib/auth/server"
 import { getTrackedFunds } from "@/lib/services/fund-service"
 
 import { getDictionary, hasLocale } from "../../dictionaries"
@@ -22,7 +23,8 @@ export default async function FundsPage({
   }
 
   const dict = getDictionary(lang)
-  const trackedFundsResponse = await getTrackedFunds(null)
+  const user = await requireCurrentUser()
+  const trackedFundsResponse = await getTrackedFunds(user.id)
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">

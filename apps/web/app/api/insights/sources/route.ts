@@ -2,7 +2,9 @@ import {
   badRequest,
   fromServiceResponse,
   internalError,
+  unauthorized,
 } from "@/lib/api/route-response"
+import { getCurrentUserId } from "@/lib/auth/server"
 import {
   createInsightSource,
   type CreateInsightSourceInput,
@@ -53,7 +55,13 @@ export async function POST(request: Request) {
       importance: parseOptionalNumber(body.importance, "importance"),
     }
 
-    return fromServiceResponse(await createInsightSource(null, input), 201)
+    const userId = await getCurrentUserId()
+
+    if (!userId) {
+      return unauthorized()
+    }
+
+    return fromServiceResponse(await createInsightSource(userId, input), 201)
   } catch (error) {
     if (error instanceof SyntaxError) {
       return badRequest("INVALID_JSON", "Request body must be valid JSON")

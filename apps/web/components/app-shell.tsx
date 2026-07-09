@@ -18,6 +18,7 @@ type AppShellProps = {
     mockDataDescription: string
     search: string
     notifications: string
+    signOut: string
     language: string
     chinese: string
     english: string

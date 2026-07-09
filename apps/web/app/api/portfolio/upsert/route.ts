@@ -2,7 +2,9 @@ import {
   badRequest,
   fromServiceResponse,
   internalError,
+  unauthorized,
 } from "@/lib/api/route-response"
+import { getCurrentUserId } from "@/lib/auth/server"
 import {
   upsertUserPosition,
   type UpsertUserPositionInput,
@@ -38,7 +40,13 @@ export async function POST(request: Request) {
       note: typeof body.note === "string" ? body.note : null,
     }
 
-    return fromServiceResponse(await upsertUserPosition(null, input))
+    const userId = await getCurrentUserId()
+
+    if (!userId) {
+      return unauthorized()
+    }
+
+    return fromServiceResponse(await upsertUserPosition(userId, input))
   } catch (error) {
     if (error instanceof SyntaxError) {
       return badRequest("INVALID_JSON", "Request body must be valid JSON")

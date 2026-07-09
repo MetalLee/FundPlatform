@@ -5,6 +5,7 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Save } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -51,6 +52,8 @@ export type PortfolioSummaryLabels = {
   }
   positionsTitle: string
   positionsDescription: string
+  planNoticeTitle: string
+  planNoticeDescription: string
   fields: {
     holdingAmount: string
     holdingShares: string
@@ -130,6 +133,10 @@ export function PortfolioSummary({ items, labels }: PortfolioSummaryProps) {
       </section>
 
       <section className="space-y-4">
+        <Alert>
+          <AlertTitle>{labels.planNoticeTitle}</AlertTitle>
+          <AlertDescription>{labels.planNoticeDescription}</AlertDescription>
+        </Alert>
         <div className="space-y-1">
           <h2 className="text-lg font-medium">{labels.positionsTitle}</h2>
           <p className="text-sm text-muted-foreground">

@@ -1,6 +1,6 @@
 # Fund Platform
 
-Fund Platform is a Next.js + Supabase MVP for tracking public fund holdings, personal positions, mock market quotes, and estimated daily portfolio movement. The app is built for a single-user development flow first, while keeping `user_id` fields and service boundaries ready for future Supabase Auth.
+Fund Platform is a Next.js + Supabase MVP for tracking public fund holdings, personal positions, cached market quotes, and estimated daily portfolio movement. The app uses Supabase Auth with email confirmation, user-scoped private data, and a GitHub Actions AKShare worker for shared data ingestion.
 
 ## Project Goals
 
@@ -18,7 +18,7 @@ Fund Platform is a Next.js + Supabase MVP for tracking public fund holdings, per
 - UI: shadcn/ui-style components in `packages/ui`, Tailwind CSS
 - Icons: `lucide-react`
 - Database: Supabase Postgres
-- Data providers: mock fund and market providers, with real-provider placeholders
+- Data providers: mock fund and market providers for local mode; AKShare runs only in GitHub Actions
 - Deployment target: Vercel
 
 ## shadcn/ui Configuration
@@ -60,11 +60,19 @@ Do not run `pnpm --filter web dev` directly when local env values are required. 
 1. Create a Supabase project.
 2. Open the Supabase SQL Editor.
 3. Execute `supabase/schema.sql`.
-4. Optionally execute `supabase/seed.sql`.
-5. Copy project URL, publishable key, and service role key into root `.env.local`.
-6. Keep `USE_MOCK_DATA=true` until real third-party providers are implemented.
+4. Execute migrations in `supabase/migrations/`, including the auth/RLS migration.
+5. Optionally execute `supabase/seed.sql`.
+6. Copy project URL, publishable key, and service role key into root `.env.local`.
+7. Keep `USE_MOCK_DATA=true` until real third-party providers are implemented.
 
-The schema enables RLS on all MVP tables and uses permissive development policies. Tables keep nullable `user_id` columns so future Supabase Auth can replace the current `userId = null` single-user flow.
+Email confirmation must be enabled in Supabase Auth for local and production projects. Registration intentionally shows a confirmation-required state and app data pages require a confirmed email session.
+
+The auth migration adds `profiles` and `user_settings`, and migrates private tables to `auth.uid() = user_id` RLS policies. The shared-data migration splits data ownership:
+
+- Shared public cache: `funds`, `fund_navs`, `fund_holdings`, `fund_asset_allocations`, `market_quotes`, `data_sync_logs`
+- User private data: `user_tracked_funds`, `user_positions`, `user_investment_plans`, `user_investment_orders`, `insight_sources`
+
+Shared tables are readable to authenticated users. Writes are performed by the GitHub Actions worker with `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Local Development
 
@@ -125,7 +133,7 @@ The web app is under `apps/web`, but root scripts are preferred because they loa
 
 ## Vercel Cron Configuration
 
-Protected cron routes:
+The old Vercel cron routes are retained as protected no-op compatibility endpoints:
 
 - `GET /api/cron/sync-market-data`
 - `GET /api/cron/sync-fund-holdings`
@@ -136,29 +144,43 @@ Both require:
 Authorization: Bearer ${CRON_SECRET}
 ```
 
-Suggested schedule:
+They do not run AKShare, scrape EastMoney/Tiantian, or perform long Python jobs. Real ingestion runs in GitHub Actions.
 
-- Market data sync: during market hours or near close, depending on the markets you support.
-- Fund holdings sync: once per day at most. Public holdings usually update by report cycle, not intraday.
+## AKShare GitHub Actions Worker
 
-Example `vercel.json`:
+Worker files live under `workers/akshare_sync`. Required GitHub Secrets:
 
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/sync-market-data",
-      "schedule": "0 8 * * 1-5"
-    },
-    {
-      "path": "/api/cron/sync-fund-holdings",
-      "schedule": "0 20 * * *"
-    }
-  ]
-}
-```
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-Vercel Cron cannot set arbitrary headers directly in `vercel.json`; use Vercel's cron protection patterns or call these endpoints from a scheduler that can attach the Authorization header.
+The workflow is `.github/workflows/akshare-sync.yml` and supports manual `workflow_dispatch` with a selected task and comma-separated fund codes.
+
+Scheduled jobs use UTC cron for Beijing-time business events:
+
+- `30 8 * * 1-5` UTC: 16:30 Beijing, sync A-share and HK quotes
+- `30 13 * * 1-5` UTC: 21:30 Beijing, sync latest fund NAV
+- `30 15 * * 1-5` UTC: 23:30 Beijing, sync US quotes and recalculate fund estimates
+- `0 22 * * 0` UTC: Monday 06:00 Beijing, weekly fund basic information refresh
+- `0 18 1 * *` UTC: first day of each month 02:00 Beijing, sync holdings disclosures, asset allocations, and bond holdings
+
+Worker tasks:
+
+- `sync-fund-basic`
+- `sync-latest-nav`
+- `sync-nav-history`
+- `sync-stock-holdings`
+- `sync-bond-holdings`
+- `sync-asset-allocations`
+- `sync-fund-disclosures`
+- `sync-a-share-quotes`
+- `sync-hk-quotes`
+- `sync-us-quotes`
+- `recalculate-estimates`
+- `sync-all`
+
+Each task writes a row to `data_sync_logs` with `source`, `task`, `status`, `target`, `item_count`, `duration_ms`, `error_code`, and `error_message`. Public table writes are idempotent upserts, so a failed worker run does not clear existing cached data.
+
+Dashboard, Funds, and Fund Detail pages read only the Supabase cache and display freshness metadata such as `last_synced_at` and `data_source`. Estimate warnings call out stale quotes, stale public holdings, low holding coverage, failed worker runs, and workers that have not run recently without changing the estimate formula.
 
 ## Data Source Limits
 
@@ -167,6 +189,17 @@ Vercel Cron cannot set arbitrary headers directly in `vercel.json`; use Vercel's
 - Bonds, cash, derivatives, and manager trading between reports may be missing.
 - Mock providers are deterministic and are not real market data.
 - Real third-party provider integrations are not implemented in the MVP.
+
+## Daily Investment Plan Rules
+
+`daily_invest_amount` is an MVP planning display only. Saving it writes `user_investment_plans`; it does not create real subscription orders and does not automatically increase `holding_amount`, `cost_amount`, or `holding_shares`.
+
+Users can still manually maintain official `holding_amount`, `holding_shares`, and `cost_amount` in Portfolio. Future automated order confirmation must use `user_investment_orders`:
+
+- Daytime order creation can create `status = pending_nav` and may calculate `estimated_shares` from an estimated NAV.
+- Pending orders must not update official `holding_shares`.
+- After official NAV is published, confirmation writes `official_nav`, calculates `confirmed_shares`, sets `status = confirmed`, and only then may update official positions.
+- Supported order statuses are `pending_nav`, `confirmed`, `failed`, and `cancelled`.
 
 ## Why Gains and Losses Are Estimates
 

@@ -31,6 +31,7 @@ type FundCardLabels = {
     latestNavDate: string
     latestNavChange: string
     lastSyncedAt: string
+    dataSource: string
     unknown: string
   }
   viewDetail: string
@@ -138,6 +139,11 @@ export function FundCard({ fund, lang, labels }: FundCardProps) {
             fund.last_synced_at,
             lang === "zh" ? "zh-CN" : "en-US",
           )}
+          emptyValue={labels.fields.unknown}
+        />
+        <FundMeta
+          label={labels.fields.dataSource}
+          value={fund.source}
           emptyValue={labels.fields.unknown}
         />
       </CardContent>

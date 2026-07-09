@@ -2,6 +2,7 @@ import { ErrorState } from "@/components/error-state"
 import { InsightsBoard } from "@/components/insights-board"
 import { PageHeader } from "@/components/page-header"
 import { RiskNotice } from "@/components/risk-notice"
+import { requireCurrentUser } from "@/lib/auth/server"
 import { getInsightSources } from "@/lib/services/insight-service"
 
 import { getDictionary, hasLocale } from "../../dictionaries"
@@ -20,7 +21,8 @@ export default async function InsightsPage({
   }
 
   const dict = getDictionary(lang)
-  const sourcesResponse = await getInsightSources(null)
+  const user = await requireCurrentUser()
+  const sourcesResponse = await getInsightSources(user.id)
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">

@@ -23,6 +23,10 @@ export function badRequest(code: string, message: string, detail?: unknown) {
   return errorResponse(code, message, 400, detail)
 }
 
+export function unauthorized(message = "Authentication required") {
+  return errorResponse("AUTH_REQUIRED", message, 401)
+}
+
 export function internalError(error: unknown) {
   if (error instanceof Error) {
     return errorResponse("INTERNAL_SERVER_ERROR", error.message, 500)

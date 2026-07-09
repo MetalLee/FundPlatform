@@ -1,0 +1,87 @@
+name: AKShare Supabase Sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Worker task
+        required: true
+        default: sync-all
+        type: choice
+        options:
+          - sync-all
+          - sync-fund-basic
+          - sync-latest-nav
+          - sync-nav-history
+          - sync-stock-holdings
+          - sync-bond-holdings
+          - sync-asset-allocations
+          - sync-fund-disclosures
+          - sync-a-share-quotes
+          - sync-hk-quotes
+          - sync-us-quotes
+          - recalculate-estimates
+      fund_codes:
+        description: Comma-separated fund codes for fund-specific tasks
+        required: false
+        default: "000001,161725,006327"
+  schedule:
+    - cron: "30 8 * * 1-5"
+    - cron: "30 13 * * 1-5"
+    - cron: "30 15 * * 1-5"
+    - cron: "0 22 * * 0"
+    - cron: "0 18 1 * *"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FUND_CODES: ${{ github.event.inputs.fund_codes || '000001,161725,006327' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install worker dependencies
+        run: pip install -r workers/akshare_sync/requirements.txt
+
+      - name: Resolve task
+        id: task
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "task=${{ github.event.inputs.task }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event.schedule }}" == "30 8 * * 1-5" ]]; then
+            echo "task=sync-cn-hk-quotes" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event.schedule }}" == "30 13 * * 1-5" ]]; then
+            echo "task=sync-latest-nav" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event.schedule }}" == "30 15 * * 1-5" ]]; then
+            echo "task=sync-us-quotes-and-estimates" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event.schedule }}" == "0 22 * * 0" ]]; then
+            echo "task=sync-fund-basic" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event.schedule }}" == "0 18 1 * *" ]]; then
+            echo "task=sync-fund-disclosures" >> "$GITHUB_OUTPUT"
+          else
+            echo "task=sync-latest-nav" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run AKShare worker
+        working-directory: workers/akshare_sync
+        shell: bash
+        run: |
+          if [[ "${{ steps.task.outputs.task }}" == "sync-cn-hk-quotes" ]]; then
+            python -m akshare_sync sync-a-share-quotes --fund-codes "$FUND_CODES"
+            python -m akshare_sync sync-hk-quotes --fund-codes "$FUND_CODES"
+          elif [[ "${{ steps.task.outputs.task }}" == "sync-us-quotes-and-estimates" ]]; then
+            python -m akshare_sync sync-us-quotes --fund-codes "$FUND_CODES"
+            python -m akshare_sync recalculate-estimates --fund-codes "$FUND_CODES"
+          else
+            python -m akshare_sync "${{ steps.task.outputs.task }}" --fund-codes "$FUND_CODES"
+          fi

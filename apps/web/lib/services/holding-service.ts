@@ -46,7 +46,9 @@ export async function syncFundHoldings(
       shares: holding.shares ?? null,
       market_value: holding.marketValue ?? null,
       source: holding.source,
+      data_source: holding.source,
       source_report_date: holding.sourceReportDate ?? null,
+      last_synced_at: new Date().toISOString(),
     }))
 
     const { data, error } = await supabase
@@ -97,6 +99,10 @@ export async function getLatestHoldings(
     const latestReportPeriod = latestRows?.[0]?.report_period
 
     if (!latestReportPeriod) {
+      if (shouldUseMockData()) {
+        return getMockLatestHoldings(normalizedFundCode)
+      }
+
       return success([])
     }
 
@@ -114,6 +120,39 @@ export async function getLatestHoldings(
     return success(data ?? [])
   } catch (error) {
     return toFailure("GET_LATEST_HOLDINGS_FAILED", error)
+  }
+}
+
+async function getMockLatestHoldings(
+  fundCode: string,
+): Promise<ApiResponse<FundHoldingRow[]>> {
+  try {
+    const provider = createFundDataProvider()
+    const now = new Date().toISOString()
+    const holdings = await provider.getFundHoldings(fundCode)
+
+    return success(
+      holdings.map((holding, index) => ({
+        id: `${holding.fundCode}-${holding.reportPeriod}-${holding.symbol}-${index}`,
+        fund_code: holding.fundCode,
+        report_period: holding.reportPeriod,
+        asset_type: holding.assetType,
+        market: holding.market,
+        symbol: holding.symbol,
+        name: holding.name,
+        weight_pct: holding.weightPct,
+        shares: holding.shares ?? null,
+        market_value: holding.marketValue ?? null,
+        source: holding.source,
+        data_source: holding.source,
+        source_report_date: holding.sourceReportDate ?? null,
+        last_synced_at: now,
+        created_at: null,
+        updated_at: null,
+      })),
+    )
+  } catch {
+    return success([])
   }
 }
 
@@ -143,4 +182,8 @@ function calculateCoveredWeightPct(
     (sum, holding) => sum + Number(holding.weight_pct ?? 0),
     0,
   )
+}
+
+function shouldUseMockData() {
+  return process.env.USE_MOCK_DATA !== "false"
 }

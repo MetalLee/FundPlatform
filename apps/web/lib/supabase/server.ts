@@ -1,4 +1,5 @@
-import { createClient } from "@supabase/supabase-js"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
 
 import type { Database } from "./types"
 
@@ -12,19 +13,29 @@ function requireServerEnv(name: string) {
   return value
 }
 
-export function createSupabaseServerClient() {
+export async function createSupabaseServerClient() {
   const publishableKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const cookieStore = await cookies()
 
-  return createClient<Database>(
+  return createServerClient<Database>(
     requireServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireServerValue("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", publishableKey),
     {
-      auth: {
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-        persistSession: false,
+      cookies: {
+        getAll() {
+          return cookieStore.getAll()
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+            })
+          } catch {
+            // Server Components can read cookies but cannot write them.
+          }
+        },
       },
     }
   )

@@ -20,6 +20,7 @@ import { MetricCard } from "@/components/metric-card"
 import { PageHeader } from "@/components/page-header"
 import { PendingLink } from "@/components/pending-link"
 import { RiskNotice } from "@/components/risk-notice"
+import { requireCurrentUser } from "@/lib/auth/server"
 import {
   estimateFundDailyChange,
   type EstimateContributor,
@@ -67,9 +68,10 @@ export default async function DashboardPage({
   }
 
   const dict = getDictionary(lang)
+  const user = await requireCurrentUser()
   const [fundsResponse, positionsResponse] = await Promise.all([
-    getTrackedFunds(null),
-    getUserPositions(null),
+    getTrackedFunds(user.id),
+    getUserPositions(user.id),
   ])
   const funds = fundsResponse.ok ? dedupeFunds(fundsResponse.data) : []
   const positions = positionsResponse.ok ? positionsResponse.data : []
@@ -79,6 +81,7 @@ export default async function DashboardPage({
     fundRows.some((row) => row.holdingAmount > 0 || row.costAmount > 0)
   const summary = buildSummary(fundRows)
   const topContributors = buildTopContributors(fundRows)
+  const freshness = buildDashboardFreshness(funds)
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -100,6 +103,22 @@ export default async function DashboardPage({
           title={dict.riskNotice.title}
           description={dict.riskNotice.description}
         />
+
+        <DataCard
+          title={dict.dashboard.freshnessTitle}
+          description={dict.dashboard.freshnessDescription}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DashboardMeta
+              label={dict.dashboard.freshnessLastSyncedAt}
+              value={formatDateTime(freshness.lastSyncedAt, lang)}
+            />
+            <DashboardMeta
+              label={dict.dashboard.freshnessDataSource}
+              value={freshness.dataSource || dict.dashboard.unknown}
+            />
+          </div>
+        </DataCard>
 
         {hasPortfolioData ? (
           <>
@@ -180,6 +199,15 @@ export default async function DashboardPage({
             }
           />
         )}
+    </div>
+  )
+}
+
+function DashboardMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 font-medium tabular-nums">{value}</div>
     </div>
   )
 }
@@ -375,4 +403,33 @@ function dedupeFunds(funds: TrackedFund[]) {
   }
 
   return Array.from(deduped.values())
+}
+
+function buildDashboardFreshness(funds: TrackedFund[]) {
+  const lastSyncedAt =
+    funds
+      .map((fund) => fund.last_synced_at)
+      .filter((value): value is string => Boolean(value))
+      .sort()
+      .at(-1) ?? null
+  const dataSource = Array.from(
+    new Set(
+      funds
+        .map((fund) => fund.source)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ).join(" / ")
+
+  return { lastSyncedAt, dataSource }
+}
+
+function formatDateTime(value: string | null, lang: string) {
+  if (!value) {
+    return "-"
+  }
+
+  return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value))
 }

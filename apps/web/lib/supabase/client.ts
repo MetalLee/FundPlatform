@@ -1,6 +1,6 @@
 "use client"
 
-import { createClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
 
 import type { Database } from "./types"
 
@@ -17,7 +17,7 @@ export function createSupabaseBrowserClient() {
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  return createClient<Database>(
+  return createBrowserClient<Database>(
     requirePublicEnv(
       "NEXT_PUBLIC_SUPABASE_URL",
       process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -26,13 +26,6 @@ export function createSupabaseBrowserClient() {
       "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
       publishableKey
     ),
-    {
-      auth: {
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        persistSession: true,
-      },
-    }
   )
 }
 

@@ -3,7 +3,9 @@ import {
   fromServiceResponse,
   internalError,
   ok,
+  unauthorized,
 } from "@/lib/api/route-response"
+import { getCurrentUserId } from "@/lib/auth/server"
 import {
   getHoldingCoverage,
   getLatestHoldings,
@@ -16,6 +18,12 @@ export async function GET(
 ) {
   try {
     const { fundCode } = await params
+    const userId = await getCurrentUserId()
+
+    if (!userId) {
+      return unauthorized()
+    }
+
     const normalizedFundCode = normalizeFundCode(fundCode)
     const holdingsResult = await getLatestHoldings(normalizedFundCode)
 

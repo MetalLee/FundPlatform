@@ -14,9 +14,11 @@ import { FundHoldingsTable } from "@/components/fund-holdings-table"
 import { PageHeader } from "@/components/page-header"
 import { PendingLink } from "@/components/pending-link"
 import { RiskNotice } from "@/components/risk-notice"
+import { requireCurrentUser } from "@/lib/auth/server"
 import {
   getFundDetail,
   type FundDetail as FundDetailData,
+  type FreshnessWarningCode,
 } from "@/lib/services/fund-service"
 import type { Database, Json } from "@/lib/supabase/types"
 
@@ -39,7 +41,8 @@ export default async function FundDetailPage({
   }
 
   const dict = getDictionary(lang)
-  const detailResponse = await getFundDetail(null, fundCode)
+  const user = await requireCurrentUser()
+  const detailResponse = await getFundDetail(user.id, fundCode)
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -117,7 +120,8 @@ function FundDetailContent({
   const contributionRows = buildContributionRows(detail.holdings, detail.quotes)
   const warnings = buildWarnings(
     detail.latestEstimate?.warnings,
-    detail.coverage.warnings,
+    detail.freshnessWarnings,
+    labels.estimate,
   )
   const estimatedChangePct = toFiniteNumber(
     detail.latestEstimate?.estimated_change_pct,
@@ -268,7 +272,11 @@ function buildContributionRows(
     )
 }
 
-function buildWarnings(value: Json | undefined, coverageWarnings: string[]) {
+function buildWarnings(
+  value: Json | undefined,
+  freshnessWarnings: FreshnessWarningCode[],
+  labels: ReturnType<typeof getDictionary>["fundDetail"]["estimate"],
+) {
   const warnings = new Set<string>()
 
   if (Array.isArray(value)) {
@@ -279,11 +287,31 @@ function buildWarnings(value: Json | undefined, coverageWarnings: string[]) {
     }
   }
 
-  for (const warning of coverageWarnings) {
-    warnings.add(warning)
+  for (const warning of freshnessWarnings) {
+    warnings.add(mapFreshnessWarning(warning, labels))
   }
 
   return Array.from(warnings)
+}
+
+function mapFreshnessWarning(
+  warning: FreshnessWarningCode,
+  labels: ReturnType<typeof getDictionary>["fundDetail"]["estimate"],
+) {
+  switch (warning) {
+    case "data_missing":
+      return labels.dataMissing
+    case "quote_stale":
+      return labels.quoteStale
+    case "holding_stale":
+      return labels.holdingStale
+    case "low_coverage":
+      return labels.lowCoverage
+    case "worker_failed":
+      return labels.workerFailed
+    case "worker_stale":
+      return labels.workerStale
+  }
 }
 
 function buildDataSource(detail: FundDetailData) {
@@ -294,14 +322,14 @@ function buildDataSource(detail: FundDetailData) {
   }
 
   for (const holding of detail.holdings) {
-    if (holding.source) {
-      sources.add(holding.source)
+    if (holding.data_source ?? holding.source) {
+      sources.add(holding.data_source ?? holding.source ?? "")
     }
   }
 
   for (const quote of detail.quotes) {
-    if (quote.source) {
-      sources.add(quote.source)
+    if (quote.data_source ?? quote.source) {
+      sources.add(quote.data_source ?? quote.source ?? "")
     }
   }
 
@@ -312,6 +340,7 @@ function buildLastUpdatedAt(detail: FundDetailData) {
   return (
     detail.fund?.last_synced_at ??
     detail.latestEstimate?.created_at ??
+    detail.quotes.find((quote) => quote.last_synced_at)?.last_synced_at ??
     detail.quotes.find((quote) => quote.quote_time)?.quote_time ??
     null
   )

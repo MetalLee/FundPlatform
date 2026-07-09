@@ -76,6 +76,8 @@ export async function syncQuotesForSymbols(
       currency: quote.currency ?? null,
       quote_time: quote.quoteTime ?? null,
       source: quote.source,
+      data_source: quote.source,
+      last_synced_at: new Date().toISOString(),
       raw: toJsonValue(quote.raw),
     }))
 
@@ -135,9 +137,108 @@ export async function getQuotesForHoldings(
       quotes.push(...(data ?? []))
     }
 
+    if (shouldUseMockData() && quotes.length < stockItems.length) {
+      const mockQuotesResponse = await getMockQuotes(stockItems)
+
+      if (mockQuotesResponse.ok) {
+        const existingKeys = new Set(
+          quotes.map((quote) => `${quote.market}:${quote.symbol}`),
+        )
+        quotes.push(
+          ...mockQuotesResponse.data.filter(
+            (quote) => !existingKeys.has(`${quote.market}:${quote.symbol}`),
+          ),
+        )
+      }
+    }
+
     return success(quotes)
   } catch (error) {
     return toFailure("GET_QUOTES_FOR_HOLDINGS_FAILED", error)
+  }
+}
+
+export async function getCachedQuotesForSymbols(
+  items: QuoteRequestItem[],
+): Promise<ApiResponse<MarketQuoteRow[]>> {
+  try {
+    const uniqueItems = dedupeQuoteItems(items)
+    const supabase = createSupabaseAdminClient()
+    const quotes: MarketQuoteRow[] = []
+
+    for (const marketItems of groupByMarket(uniqueItems).values()) {
+      const market = marketItems[0]?.market
+
+      if (!market) {
+        continue
+      }
+
+      const { data, error } = await supabase
+        .from("market_quotes")
+        .select()
+        .eq("market", market)
+        .in(
+          "symbol",
+          marketItems.map((item) => item.symbol),
+        )
+
+      if (error) {
+        return failure("SUPABASE_QUOTES_READ_FAILED", error.message, error)
+      }
+
+      quotes.push(...(data ?? []))
+    }
+
+    if (shouldUseMockData() && quotes.length < uniqueItems.length) {
+      const mockQuotesResponse = await getMockQuotes(uniqueItems)
+
+      if (mockQuotesResponse.ok) {
+        const existingKeys = new Set(
+          quotes.map((quote) => `${quote.market}:${quote.symbol}`),
+        )
+        quotes.push(
+          ...mockQuotesResponse.data.filter(
+            (quote) => !existingKeys.has(`${quote.market}:${quote.symbol}`),
+          ),
+        )
+      }
+    }
+
+    return success(quotes)
+  } catch (error) {
+    return toFailure("GET_CACHED_QUOTES_FOR_SYMBOLS_FAILED", error)
+  }
+}
+
+async function getMockQuotes(
+  items: QuoteRequestItem[],
+): Promise<ApiResponse<MarketQuoteRow[]>> {
+  try {
+    const provider = createMarketDataProvider()
+    const now = new Date().toISOString()
+    const quotes = await provider.getQuotes(dedupeQuoteItems(items))
+
+    return success(
+      quotes.map((quote, index) => ({
+        id: `${quote.market}-${quote.symbol}-${index}`,
+        market: quote.market,
+        symbol: quote.symbol,
+        name: quote.name ?? null,
+        price: quote.price ?? null,
+        previous_close: quote.previousClose ?? null,
+        change_pct: quote.changePct ?? null,
+        currency: quote.currency ?? null,
+        quote_time: quote.quoteTime ?? null,
+        source: quote.source,
+        data_source: quote.source,
+        last_synced_at: now,
+        raw: toJsonValue(quote.raw),
+        created_at: null,
+        updated_at: null,
+      })),
+    )
+  } catch {
+    return success([])
   }
 }
 
@@ -171,4 +272,8 @@ function toJsonValue(value: unknown): Json | null {
   }
 
   return value as Json
+}
+
+function shouldUseMockData() {
+  return process.env.USE_MOCK_DATA !== "false"
 }

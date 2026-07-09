@@ -37,5 +37,17 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
+# Python workers
+workers/**/.venv/
+workers/**/venv/
+workers/**/__pycache__/
+workers/**/*.py[cod]
+workers/**/*.egg-info/
+workers/**/.pytest_cache/
+workers/**/.mypy_cache/
+workers/**/.ruff_cache/
+workers/**/.coverage
+workers/**/htmlcov/
+
 # Vercel
 .vercel/

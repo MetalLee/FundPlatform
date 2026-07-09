@@ -6,6 +6,7 @@ import {
 } from "@/components/portfolio-summary"
 import { PageHeader } from "@/components/page-header"
 import { RiskNotice } from "@/components/risk-notice"
+import { requireCurrentUser } from "@/lib/auth/server"
 import { estimateFundDailyChange } from "@/lib/services/estimate-service"
 import { getTrackedFunds } from "@/lib/services/fund-service"
 import { getUserPositions } from "@/lib/services/portfolio-service"
@@ -30,9 +31,10 @@ export default async function PortfolioPage({
   }
 
   const dict = getDictionary(lang)
+  const user = await requireCurrentUser()
   const [fundsResponse, positionsResponse] = await Promise.all([
-    getTrackedFunds(null),
-    getUserPositions(null),
+    getTrackedFunds(user.id),
+    getUserPositions(user.id),
   ])
 
   const hasLoadError = !fundsResponse.ok || !positionsResponse.ok
