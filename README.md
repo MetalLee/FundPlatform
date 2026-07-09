@@ -48,6 +48,10 @@ Copy `.env.example` to `.env.local` at the repository root and fill values for t
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Preferred | Browser and server | Supabase publishable key for public client access. Preferred over legacy anon key. |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Optional fallback | Browser and server | Legacy Supabase anon key fallback. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server only | Supabase service role key for admin/server operations. Never expose in client components. |
+| `GITHUB_WORKFLOW_DISPATCH_TOKEN` | Optional | Vercel server only | GitHub token used by the web app to trigger `workflow_dispatch` after a user adds a fund. Requires workflow permission. |
+| `GITHUB_WORKFLOW_REPOSITORY` | Optional | Vercel server only | Repository slug for dispatch, for example `MetalLee/FundPlatform`. Required when dispatch token is set. |
+| `GITHUB_WORKFLOW_FILE` | Optional | Vercel server only | Workflow file name. Defaults to `akshare-sync.yml`. |
+| `GITHUB_WORKFLOW_REF` | Optional | Vercel server only | Git ref used for dispatch. Defaults to `main`. |
 | `USE_MOCK_DATA` | Optional | Server/build | Use mock providers when `true`. Recommended for MVP local development. |
 | `FINNHUB_API_KEY` | Optional | Server only | Reserved for future Finnhub market data integration. |
 | `ALPHA_VANTAGE_API_KEY` | Optional | Server only | Reserved for future Alpha Vantage market data integration. |
@@ -153,7 +157,9 @@ Worker files live under `workers/akshare_sync`. Required GitHub Secrets:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-The workflow is `.github/workflows/akshare-sync.yml` and supports manual `workflow_dispatch` with a selected task and comma-separated fund codes.
+The workflow is `.github/workflows/akshare-sync.yml` and supports manual `workflow_dispatch` with a selected task and an optional single `fund_code`.
+
+Business data does not live in GitHub variables or GitHub Actions environment values. When a user adds a fund, the app writes `user_tracked_funds`, upserts `funds.sync_status = 'pending'`, and triggers `workflow_dispatch` for that fund if the Vercel-side GitHub dispatch token is configured. Scheduled GitHub Actions jobs query active tracked funds from Supabase instead of reading a fund list from GitHub environment variables.
 
 Scheduled jobs use UTC cron for Beijing-time business events:
 

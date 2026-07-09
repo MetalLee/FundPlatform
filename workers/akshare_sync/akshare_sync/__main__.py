@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 
 from .jobs import (
     recalculate_estimates,
@@ -16,11 +15,12 @@ from .jobs import (
     with_sync_log,
 )
 from .supabase import SupabaseClient
+from .tracking import get_active_tracked_fund_codes
 from .transform import normalize_fund_code
 
 
 def parse_fund_codes(value: str | None) -> list[str]:
-    raw_value = value or os.environ.get("FUND_CODES", "")
+    raw_value = value or ""
     return [
       normalize_fund_code(item)
       for item in raw_value.split(",")
@@ -53,26 +53,29 @@ def main() -> None:
     client = SupabaseClient.from_env()
     fund_codes = parse_fund_codes(args.fund_codes)
 
-    if args.task in {
+    run_task(client, args.task, fund_codes)
+
+
+def run_task(client: SupabaseClient, task: str, fund_codes: list[str]) -> None:
+    if task in {
+        "sync-all",
         "sync-fund-basic",
+        "sync-latest-nav",
         "sync-nav-history",
         "sync-stock-holdings",
         "sync-bond-holdings",
         "sync-asset-allocations",
         "sync-fund-disclosures",
+        "recalculate-estimates",
     } and not fund_codes:
-        raise SystemExit("--fund-codes or FUND_CODES is required for this task")
+        fund_codes = get_active_tracked_fund_codes(client)
 
-    run_task(client, args.task, fund_codes)
-
-
-def run_task(client: SupabaseClient, task: str, fund_codes: list[str]) -> None:
     target = ",".join(fund_codes) if fund_codes else None
 
     if task == "sync-fund-basic":
         with_sync_log(client, task, target, lambda: sync_fund_basic(client, fund_codes))
     elif task == "sync-latest-nav":
-        with_sync_log(client, task, target, lambda: sync_latest_nav(client, fund_codes or None))
+        with_sync_log(client, task, target, lambda: sync_latest_nav(client, fund_codes))
     elif task == "sync-nav-history":
         with_sync_log(client, task, target, lambda: sync_nav_history(client, fund_codes))
     elif task == "sync-stock-holdings":
@@ -90,7 +93,7 @@ def run_task(client: SupabaseClient, task: str, fund_codes: list[str]) -> None:
     elif task == "sync-us-quotes":
         with_sync_log(client, task, "US", lambda: sync_market_quotes(client, "US"))
     elif task == "recalculate-estimates":
-        with_sync_log(client, task, target, lambda: recalculate_estimates(client, fund_codes or None))
+        with_sync_log(client, task, target, lambda: recalculate_estimates(client, fund_codes))
     elif task == "sync-all":
         if fund_codes:
             run_task(client, "sync-fund-basic", fund_codes)

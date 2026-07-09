@@ -7,9 +7,8 @@ Required environment variables:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-Optional environment variables:
-
-- `FUND_CODES`: comma-separated fund codes, for example `000001,161725,006327`
+Fund-specific tasks accept `--fund-codes`. If omitted, the worker queries active
+tracked funds from Supabase `user_tracked_funds`.
 
 Examples:
 

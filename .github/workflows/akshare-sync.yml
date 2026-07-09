@@ -21,10 +21,10 @@ on:
           - sync-hk-quotes
           - sync-us-quotes
           - recalculate-estimates
-      fund_codes:
-        description: Comma-separated fund codes for fund-specific tasks
+      fund_code:
+        description: Optional single fund code for immediate workflow_dispatch sync
         required: false
-        default: "000001,161725,006327"
+        default: ""
   schedule:
     - cron: "30 8 * * 1-5"
     - cron: "30 13 * * 1-5"
@@ -39,7 +39,6 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      FUND_CODES: ${{ github.event.inputs.fund_codes || '000001,161725,006327' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,12 +75,17 @@ jobs:
         working-directory: workers/akshare_sync
         shell: bash
         run: |
+          FUND_ARG=()
+          if [[ -n "${{ github.event.inputs.fund_code }}" ]]; then
+            FUND_ARG=(--fund-codes "${{ github.event.inputs.fund_code }}")
+          fi
+
           if [[ "${{ steps.task.outputs.task }}" == "sync-cn-hk-quotes" ]]; then
-            python -m akshare_sync sync-a-share-quotes --fund-codes "$FUND_CODES"
-            python -m akshare_sync sync-hk-quotes --fund-codes "$FUND_CODES"
+            python -m akshare_sync sync-a-share-quotes "${FUND_ARG[@]}"
+            python -m akshare_sync sync-hk-quotes "${FUND_ARG[@]}"
           elif [[ "${{ steps.task.outputs.task }}" == "sync-us-quotes-and-estimates" ]]; then
-            python -m akshare_sync sync-us-quotes --fund-codes "$FUND_CODES"
-            python -m akshare_sync recalculate-estimates --fund-codes "$FUND_CODES"
+            python -m akshare_sync sync-us-quotes "${FUND_ARG[@]}"
+            python -m akshare_sync recalculate-estimates "${FUND_ARG[@]}"
           else
-            python -m akshare_sync "${{ steps.task.outputs.task }}" --fund-codes "$FUND_CODES"
+            python -m akshare_sync "${{ steps.task.outputs.task }}" "${FUND_ARG[@]}"
           fi

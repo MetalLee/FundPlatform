@@ -24,6 +24,7 @@ type InsertTimestampColumns = {
 }
 
 export type SyncLogStatus = "success" | "failed"
+export type FundSyncStatus = "pending" | "syncing" | "synced" | "failed"
 
 export type Database = {
   public: {
@@ -37,6 +38,10 @@ export type Database = {
           company: string | null
           data_source: string | null
           last_synced_at: string | null
+          sync_status: FundSyncStatus
+          sync_requested_at: string | null
+          sync_completed_at: string | null
+          sync_error_message: string | null
         } & TimestampColumns,
         {
           fund_code: string
@@ -46,6 +51,10 @@ export type Database = {
           company?: string | null
           data_source?: string | null
           last_synced_at?: string | null
+          sync_status?: FundSyncStatus
+          sync_requested_at?: string | null
+          sync_completed_at?: string | null
+          sync_error_message?: string | null
         } & InsertTimestampColumns
       >
       fund_navs: Table<
@@ -107,11 +116,13 @@ export type Database = {
           id: string
           user_id: string
           fund_code: string
+          is_active: boolean
         } & TimestampColumns,
         {
           id?: string
           user_id: string
           fund_code: string
+          is_active?: boolean
         } & InsertTimestampColumns
       >
       fund_holdings: Table<

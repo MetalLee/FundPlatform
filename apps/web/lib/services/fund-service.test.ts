@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  buildPendingFundUpsert,
   buildFreshnessWarnings,
   normalizeFreshnessWarning,
 } from "./fund-service"
@@ -54,4 +55,12 @@ test("warns when the sync worker has not run recently", () => {
     }),
     ["worker_stale"],
   )
+})
+
+test("builds pending shared fund payload when a user adds a tracked fund", () => {
+  assert.deepEqual(buildPendingFundUpsert("000001", new Date("2026-07-09T00:00:00.000Z")), {
+    fund_code: "000001",
+    sync_status: "pending",
+    sync_requested_at: "2026-07-09T00:00:00.000Z",
+  })
 })

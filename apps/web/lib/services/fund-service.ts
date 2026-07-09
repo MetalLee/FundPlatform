@@ -1,4 +1,5 @@
 import { createFundDataProvider } from "@/lib/providers/fund/provider-factory"
+import { dispatchFundSyncWorkflow } from "@/lib/github/workflow-dispatch"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import type { Database } from "@/lib/supabase/types"
 import {
@@ -56,6 +57,14 @@ const QUOTE_STALE_MS = 1000 * 60 * 60 * 24 * 3
 const HOLDING_STALE_MS = 1000 * 60 * 60 * 24 * 120
 const WORKER_STALE_MS = 1000 * 60 * 60 * 24 * 7
 const LOW_COVERAGE_THRESHOLD_PCT = 30
+
+export function buildPendingFundUpsert(fundCode: string, now = new Date()) {
+  return {
+    fund_code: normalizeFundCode(fundCode),
+    sync_status: "pending" as const,
+    sync_requested_at: now.toISOString(),
+  }
+}
 
 export function normalizeFreshnessWarning(
   lastSyncedAt: string | null | undefined,
@@ -142,6 +151,7 @@ export async function addTrackedFund(
         {
           user_id: userId,
           fund_code: normalizedFundCode,
+          is_active: true,
         },
         { onConflict: "user_id,fund_code" },
       )
@@ -152,6 +162,21 @@ export async function addTrackedFund(
       return failure("SUPABASE_USER_TRACKED_FUND_UPSERT_FAILED", error.message, error)
     }
 
+    const { error: fundError } = await supabase
+      .from("funds")
+      .upsert(buildPendingFundUpsert(normalizedFundCode), {
+        onConflict: "fund_code",
+      })
+
+    if (fundError) {
+      return failure("SUPABASE_PENDING_FUND_UPSERT_FAILED", fundError.message, fundError)
+    }
+
+    const dispatchResponse = await dispatchFundSyncWorkflow({
+      task: "sync-all",
+      fundCode: normalizedFundCode,
+    })
+
     const detailResponse = await getFundDetail(userId, normalizedFundCode)
 
     if (!detailResponse.ok) {
@@ -161,7 +186,10 @@ export async function addTrackedFund(
     return success({
       trackedFund: data,
       fund: detailResponse.data.fund ?? createPlaceholderFund(normalizedFundCode, userId),
-      warnings: detailResponse.data.freshnessWarnings,
+      warnings: [
+        ...detailResponse.data.freshnessWarnings,
+        ...(dispatchResponse.ok ? [] : [dispatchResponse.error.code]),
+      ],
     })
   } catch (error) {
     return toFailure("ADD_TRACKED_FUND_FAILED", error)
@@ -194,6 +222,7 @@ export async function getTrackedFunds(
       .from("user_tracked_funds")
       .select()
       .eq("user_id", userId)
+      .eq("is_active", true)
       .order("created_at")
 
     if (error) {

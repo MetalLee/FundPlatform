@@ -99,6 +99,7 @@ Vercel must not:
   - `SUPABASE_SERVICE_ROLE_KEY`
 - No AKShare API key is required.
 - No internal token, mTLS, or private network is required for MVP.
+- Do not store business fund lists in GitHub environment variables. Scheduled jobs query active tracked funds from Supabase.
 
 ### Data Ownership Split
 

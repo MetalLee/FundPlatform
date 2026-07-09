@@ -77,6 +77,9 @@ def sync_fund_basic(client: SupabaseClient, fund_codes: list[str]) -> int:
                 "company": first_value(overview_row, ["基金管理人", "基金公司", "管理人"]),
                 "data_source": "akshare:fund_name_em,fund_overview_em",
                 "last_synced_at": synced_at,
+                "sync_status": "synced",
+                "sync_completed_at": synced_at,
+                "sync_error_message": None,
             }
         )
 
@@ -87,11 +90,15 @@ def sync_latest_nav(client: SupabaseClient, fund_codes: list[str] | None) -> int
     df = ak.fund_open_fund_daily_em()
     synced_at = now_iso()
     rows: list[dict] = []
-    wanted = {normalize_fund_code(code) for code in fund_codes} if fund_codes else None
+    wanted = (
+        {normalize_fund_code(code) for code in fund_codes}
+        if fund_codes is not None
+        else None
+    )
 
     for _, row in df.iterrows():
         code = normalize_fund_code(first_value(row, ["基金代码", "代码", "fund_code"]))
-        if wanted and code not in wanted:
+        if wanted is not None and code not in wanted:
             continue
         nav_date = to_date(first_value(row, ["净值日期", "日期"]))
         if not nav_date:
@@ -278,7 +285,7 @@ def recalculate_estimates(
     fund_codes: list[str] | None,
 ) -> int:
     estimate_date = now_iso()[:10]
-    codes = fund_codes or [
+    codes = fund_codes if fund_codes is not None else [
         row["fund_code"]
         for row in client.select(
             "funds",
