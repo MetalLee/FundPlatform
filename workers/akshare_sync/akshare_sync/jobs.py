@@ -145,7 +145,7 @@ def sync_fund_basic(client: SupabaseClient, fund_codes: list[str]) -> int:
                 or first_value(overview_row, ["基金名称", "基金简称"]),
                 "fund_type": first_value(name_row, ["基金类型", "类型"])
                 or first_value(overview_row, ["基金类型", "基金类别"]),
-                "manager": first_value(overview_row, ["基金经理", "管理人"]),
+                "manager": first_value(overview_row, ["基金经理人", "管理人"]),
                 "company": first_value(overview_row, ["基金管理人", "基金公司", "管理人"]),
                 "data_source": "akshare:fund_name_em,fund_overview_em",
                 "last_synced_at": synced_at,
@@ -346,6 +346,14 @@ def sync_asset_allocations(client: SupabaseClient, fund_codes: list[str]) -> int
         "fund_asset_allocations",
         rows,
         "fund_code,report_period,asset_type",
+    )
+
+
+def sync_fund_disclosures(client: SupabaseClient, fund_codes: list[str]) -> int:
+    return (
+        sync_stock_holdings(client, fund_codes)
+        + sync_bond_holdings(client, fund_codes)
+        + sync_asset_allocations(client, fund_codes)
     )
 
 def sync_market_quotes(client: SupabaseClient, market: str) -> int:
