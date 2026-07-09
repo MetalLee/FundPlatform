@@ -173,7 +173,7 @@ export async function addTrackedFund(
     }
 
     const dispatchResponse = await dispatchFundSyncWorkflow({
-      task: "sync-all",
+      task: "sync-fund-basic",
       fundCode: normalizedFundCode,
     })
 

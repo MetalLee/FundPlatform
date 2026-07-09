@@ -3,12 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "bash scripts/with-root-env.sh turbo build",
-    "dev": "bash scripts/with-root-env.sh turbo dev",
-    "lint": "bash scripts/with-root-env.sh turbo lint",
-    "format": "bash scripts/with-root-env.sh turbo format",
-    "start:web": "bash scripts/with-root-env.sh pnpm --dir apps/web exec next start",
-    "typecheck": "bash scripts/with-root-env.sh turbo typecheck"
+    "build": "node scripts/with-root-env.mjs turbo build",
+    "dev": "node scripts/with-root-env.mjs turbo dev",
+    "lint": "node scripts/with-root-env.mjs turbo lint",
+    "format": "node scripts/with-root-env.mjs turbo format",
+    "start:web": "node scripts/with-root-env.mjs pnpm --dir apps/web exec next start",
+    "typecheck": "node scripts/with-root-env.mjs turbo typecheck"
   },
   "devDependencies": {
     "@workspace/eslint-config": "workspace:*",

@@ -47,6 +47,10 @@ function ThemeHotkey() {
         return
       }
 
+      if (typeof event.key !== "string") {
+        return
+      }
+
       if (event.key.toLowerCase() !== "d") {
         return
       }

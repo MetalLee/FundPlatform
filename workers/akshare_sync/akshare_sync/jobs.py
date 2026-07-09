@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
 import time
 from typing import Callable
 
+import requests
 import akshare as ak
 import pandas as pd
+from requests.exceptions import RequestException
 
 from .estimates import calculate_fund_estimate
 from .supabase import SupabaseClient
@@ -16,6 +19,48 @@ from .transform import (
     to_date,
     to_float,
 )
+
+AKSHARE_DEFAULT_TIMEOUT_SECONDS = float(os.getenv("AKSHARE_DEFAULT_TIMEOUT_SECONDS", "15"))
+AKSHARE_RETRY_ATTEMPTS = max(1, int(os.getenv("AKSHARE_RETRY_ATTEMPTS", "3")))
+AKSHARE_RETRY_BASE_DELAY_SECONDS = float(
+    os.getenv("AKSHARE_RETRY_BASE_DELAY_SECONDS", "1.0")
+)
+_ORIGINAL_REQUEST = requests.sessions.Session.request
+
+
+def _session_request_with_timeout(self: requests.sessions.Session, method: str, *args: object, **kwargs: object) -> object:  # noqa: ANN001
+    kwargs.setdefault("timeout", AKSHARE_DEFAULT_TIMEOUT_SECONDS)
+    return _ORIGINAL_REQUEST(self, method, *args, **kwargs)
+
+
+requests.sessions.Session.request = _session_request_with_timeout
+
+
+def _call_with_retries(
+    label: str,
+    func: Callable[[], pd.DataFrame],
+) -> pd.DataFrame:
+    last_error: Exception | None = None
+    for attempt in range(1, AKSHARE_RETRY_ATTEMPTS + 1):
+        try:
+            return func()
+        except RequestException as error:
+            last_error = error
+            if attempt >= AKSHARE_RETRY_ATTEMPTS:
+                raise
+            sleep_seconds = AKSHARE_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+            time.sleep(sleep_seconds)
+    raise last_error or RuntimeError(f"Failed to execute {label}")
+
+
+def _safe_akshare_call(
+    label: str,
+    func: Callable[[], pd.DataFrame],
+) -> pd.DataFrame:
+    try:
+        return _call_with_retries(label, func)
+    except RequestException:
+        return pd.DataFrame()
 
 
 def with_sync_log(
@@ -58,13 +103,14 @@ def sync_fund_basic(client: SupabaseClient, fund_codes: list[str]) -> int:
     rows: list[dict] = []
     synced_at = now_iso()
 
-    name_df = ak.fund_name_em()
+    name_df = _safe_akshare_call("fund_name_em()", ak.fund_name_em)
 
     for fund_code in fund_codes:
         code = normalize_fund_code(fund_code)
         name_row = _find_fund_row(name_df, code)
         overview = _safe_overview(code)
         overview_row = overview.iloc[0] if not overview.empty else pd.Series(dtype=object)
+        has_metadata = not name_row.empty or not overview_row.empty
 
         rows.append(
             {
@@ -77,9 +123,9 @@ def sync_fund_basic(client: SupabaseClient, fund_codes: list[str]) -> int:
                 "company": first_value(overview_row, ["基金管理人", "基金公司", "管理人"]),
                 "data_source": "akshare:fund_name_em,fund_overview_em",
                 "last_synced_at": synced_at,
-                "sync_status": "synced",
+                "sync_status": "synced" if has_metadata else "failed",
                 "sync_completed_at": synced_at,
-                "sync_error_message": None,
+                "sync_error_message": None if has_metadata else "No metadata available after retries.",
             }
         )
 
@@ -385,6 +431,12 @@ def _find_fund_row(df: pd.DataFrame, fund_code: str) -> pd.Series:
 
 def _safe_overview(fund_code: str) -> pd.DataFrame:
     try:
-        return ak.fund_overview_em(symbol=fund_code)
+        return _safe_akshare_call(
+            f"fund_overview_em(symbol={fund_code})",
+            lambda: ak.fund_overview_em(symbol=fund_code),
+        )
     except TypeError:
-        return ak.fund_overview_em(fund=fund_code)
+        return _safe_akshare_call(
+            f"fund_overview_em(fund={fund_code})",
+            lambda: ak.fund_overview_em(fund=fund_code),
+        )
