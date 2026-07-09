@@ -1,11 +1,10 @@
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 
-import { AppShell } from "@/components/app-shell"
 import { DataCard } from "@/components/data-card"
 import { PageHeader } from "@/components/page-header"
 
-import { getDictionary, getShellLabels, hasLocale } from "../dictionaries"
+import { getDictionary, hasLocale } from "../../dictionaries"
 
 export default async function SettingsPage({
   params,
@@ -21,13 +20,7 @@ export default async function SettingsPage({
   const dict = getDictionary(lang)
 
   return (
-    <AppShell
-      lang={lang}
-      path="/settings"
-      labels={getShellLabels(lang)}
-      title={dict.shell.titles.settings}
-    >
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <PageHeader
           title={dict.settings.title}
           description={dict.settings.description}
@@ -69,7 +62,6 @@ export default async function SettingsPage({
             </div>
           </DataCard>
         </section>
-      </div>
-    </AppShell>
+    </div>
   )
 }

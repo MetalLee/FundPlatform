@@ -1,10 +1,11 @@
 import type { ReactNode } from "react"
 
 import { Badge } from "@workspace/ui/components/badge"
+import { ScrollArea } from "@workspace/ui/components/scroll-area"
 import { Separator } from "@workspace/ui/components/separator"
 
 import type { Locale } from "@/app/[lang]/dictionaries"
-import { SidebarBrand, SidebarNav } from "@/components/sidebar-nav"
+import { SidebarNav } from "@/components/sidebar-nav"
 import { TopBar } from "@/components/top-bar"
 
 type AppShellProps = {
@@ -15,7 +16,6 @@ type AppShellProps = {
     brandSubtitle: string
     mockData: string
     mockDataDescription: string
-    estimatedWorkspace: string
     search: string
     notifications: string
     language: string
@@ -37,24 +37,20 @@ export function AppShell({
   lang,
   path,
   labels,
-  title,
   children,
 }: AppShellProps) {
   return (
-    <div className="min-h-svh bg-background">
-      <div className="grid min-h-svh lg:grid-cols-[15rem_1fr]">
-        <aside className="hidden border-r bg-muted/20 lg:flex lg:flex-col">
-          <div className="p-4">
-            <SidebarBrand
-              lang={lang}
-              appName={labels.appName}
-              subtitle={labels.brandSubtitle}
-            />
-          </div>
+    <div className="flex h-svh flex-col overflow-hidden bg-background">
+      <TopBar lang={lang} path={path} labels={labels} />
+
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[15rem_1fr]">
+        <aside className="hidden min-h-0 border-r bg-muted/20 lg:flex lg:flex-col">
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="px-3 py-4">
+              <SidebarNav lang={lang} labels={labels.nav} />
+            </div>
+          </ScrollArea>
           <Separator />
-          <div className="flex-1 px-3 py-4">
-            <SidebarNav lang={lang} labels={labels.nav} />
-          </div>
           <div className="p-4">
             <div className="rounded-lg border bg-background p-3">
               <Badge variant="secondary">{labels.mockData}</Badge>
@@ -65,18 +61,19 @@ export function AppShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-col">
-          <TopBar lang={lang} path={path} labels={labels} title={title} />
-          <div className="border-b px-4 py-2 lg:hidden">
+        <div className="flex min-h-0 min-w-0 flex-col">
+          <div className="shrink-0 border-b px-4 py-2 lg:hidden">
             <SidebarNav
               lang={lang}
               labels={labels.nav}
-              className="flex-row overflow-x-auto pb-1"
+              className="scrollbar-subtle flex-row overflow-x-auto pb-1"
             />
           </div>
-          <main className="flex-1 px-4 py-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200 lg:px-6">
-            {children}
-          </main>
+          <ScrollArea className="min-h-0 flex-1">
+            <main className="scrollbar-subtle px-4 py-6 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200 lg:px-6">
+              {children}
+            </main>
+          </ScrollArea>
         </div>
       </div>
     </div>

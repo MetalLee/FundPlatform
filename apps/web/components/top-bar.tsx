@@ -4,35 +4,30 @@ import { Button } from "@workspace/ui/components/button"
 
 import { LanguageSwitcher } from "@/app/[lang]/language-switcher"
 import type { Locale } from "@/app/[lang]/dictionaries"
+import { SidebarBrand } from "@/components/sidebar-nav"
 
 type TopBarProps = {
   lang: Locale
   path: string
   labels: {
-    estimatedWorkspace: string
+    appName: string
+    brandSubtitle: string
     search: string
     notifications: string
     language: string
     chinese: string
     english: string
   }
-  title?: string
 }
 
-export function TopBar({
-  lang,
-  path,
-  labels,
-  title = "Fund Platform",
-}: TopBarProps) {
+export function TopBar({ lang, path, labels }: TopBarProps) {
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{title}</div>
-        <div className="text-xs text-muted-foreground">
-          {labels.estimatedWorkspace}
-        </div>
-      </div>
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:px-6">
+      <SidebarBrand
+        lang={lang}
+        appName={labels.appName}
+        subtitle={labels.brandSubtitle}
+      />
       <div className="flex items-center gap-2">
         <Button size="icon" variant="ghost" aria-label={labels.search}>
           <Search className="size-4" />

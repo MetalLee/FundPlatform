@@ -11,7 +11,6 @@ import {
   TableRow,
 } from "@workspace/ui/components/table"
 
-import { AppShell } from "@/components/app-shell"
 import { DataCard } from "@/components/data-card"
 import { EmptyState } from "@/components/empty-state"
 import { ChangeBadge } from "@/components/finance/change-badge"
@@ -29,7 +28,7 @@ import { getTrackedFunds } from "@/lib/services/fund-service"
 import { getUserPositions } from "@/lib/services/portfolio-service"
 import type { Database } from "@/lib/supabase/types"
 
-import { getDictionary, getShellLabels, hasLocale } from "../dictionaries"
+import { getDictionary, hasLocale } from "../../dictionaries"
 
 type TrackedFund = Database["public"]["Tables"]["tracked_funds"]["Row"]
 type UserPosition = Database["public"]["Tables"]["user_positions"]["Row"]
@@ -82,13 +81,7 @@ export default async function DashboardPage({
   const topContributors = buildTopContributors(fundRows)
 
   return (
-    <AppShell
-      lang={lang}
-      path="/dashboard"
-      labels={getShellLabels(lang)}
-      title={dict.shell.titles.dashboard}
-    >
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <PageHeader
           title={dict.dashboard.title}
           description={dict.dashboard.description}
@@ -187,8 +180,7 @@ export default async function DashboardPage({
             }
           />
         )}
-      </div>
-    </AppShell>
+    </div>
   )
 }
 

@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/app-shell"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { FundCard } from "@/components/fund-card"
@@ -7,7 +6,7 @@ import { PageHeader } from "@/components/page-header"
 import { RiskNotice } from "@/components/risk-notice"
 import { getTrackedFunds } from "@/lib/services/fund-service"
 
-import { getDictionary, getShellLabels, hasLocale } from "../dictionaries"
+import { getDictionary, hasLocale } from "../../dictionaries"
 
 export const dynamic = "force-dynamic"
 
@@ -26,13 +25,7 @@ export default async function FundsPage({
   const trackedFundsResponse = await getTrackedFunds(null)
 
   return (
-    <AppShell
-      lang={lang}
-      path="/funds"
-      labels={getShellLabels(lang)}
-      title={dict.shell.titles.funds}
-    >
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <PageHeader
           title={dict.funds.title}
           description={dict.funds.description}
@@ -94,7 +87,6 @@ export default async function FundsPage({
             </div>
           )}
         </section>
-      </div>
-    </AppShell>
+    </div>
   )
 }

@@ -16,17 +16,16 @@ const zh = {
   },
   shell: {
     brandSubtitle: "基金分析",
-    estimatedWorkspace: "实时估算工作台",
     mockData: "Mock 数据",
     mockDataDescription: "当前界面仅展示静态数据，用于验证应用布局与基础组件。",
     search: "搜索",
     notifications: "通知",
     nav: {
-      dashboard: "Dashboard",
-      funds: "Funds",
-      portfolio: "Portfolio",
-      insights: "Insights",
-      settings: "Settings",
+      dashboard: "仪表盘",
+      funds: "基金",
+      portfolio: "组合",
+      insights: "洞察",
+      settings: "设置",
     },
     titles: {
       dashboard: "Dashboard",
@@ -332,7 +331,6 @@ const en: typeof zh = {
   },
   shell: {
     brandSubtitle: "Fund analytics",
-    estimatedWorkspace: "Real-time estimate workspace",
     mockData: "Mock data",
     mockDataDescription:
       "This interface uses static data only to validate layout and base components.",

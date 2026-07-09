@@ -2,7 +2,6 @@ import { ArrowLeft } from "lucide-react"
 
 import { Button } from "@workspace/ui/components/button"
 
-import { AppShell } from "@/components/app-shell"
 import {
   ContributionTable,
   type ContributionRow,
@@ -21,7 +20,7 @@ import {
 } from "@/lib/services/fund-service"
 import type { Database, Json } from "@/lib/supabase/types"
 
-import { getDictionary, getShellLabels, hasLocale } from "../../dictionaries"
+import { getDictionary, hasLocale } from "../../../dictionaries"
 
 type FundHolding = Database["public"]["Tables"]["fund_holdings"]["Row"]
 type MarketQuote = Database["public"]["Tables"]["market_quotes"]["Row"]
@@ -43,13 +42,7 @@ export default async function FundDetailPage({
   const detailResponse = await getFundDetail(null, fundCode)
 
   return (
-    <AppShell
-      lang={lang}
-      path={`/funds/${fundCode}`}
-      labels={getShellLabels(lang)}
-      title={dict.shell.titles.fundDetail}
-    >
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <PageTitle
           lang={lang}
           title={`${dict.fundDetail.titlePrefix} ${fundCode}`}
@@ -78,8 +71,7 @@ export default async function FundDetailPage({
             labels={dict.fundDetail}
           />
         )}
-      </div>
-    </AppShell>
+    </div>
   )
 }
 

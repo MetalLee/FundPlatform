@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/app-shell"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import {
@@ -12,7 +11,7 @@ import { getTrackedFunds } from "@/lib/services/fund-service"
 import { getUserPositions } from "@/lib/services/portfolio-service"
 import type { Database } from "@/lib/supabase/types"
 
-import { getDictionary, getShellLabels, hasLocale } from "../dictionaries"
+import { getDictionary, hasLocale } from "../../dictionaries"
 
 type TrackedFund = Database["public"]["Tables"]["tracked_funds"]["Row"]
 type UserPosition = Database["public"]["Tables"]["user_positions"]["Row"]
@@ -44,13 +43,7 @@ export default async function PortfolioPage({
     : await buildPortfolioItems(funds, positions)
 
   return (
-    <AppShell
-      lang={lang}
-      path="/portfolio"
-      labels={getShellLabels(lang)}
-      title={dict.shell.titles.portfolio}
-    >
-      <div className="mx-auto flex max-w-7xl flex-col gap-6">
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
         <PageHeader
           title={dict.portfolio.title}
           description={dict.portfolio.description}
@@ -73,8 +66,7 @@ export default async function PortfolioPage({
         ) : (
           <PortfolioSummary items={items} labels={dict.portfolio} />
         )}
-      </div>
-    </AppShell>
+    </div>
   )
 }
 
