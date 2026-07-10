@@ -395,21 +395,19 @@ def sync_fund_disclosures(client: SupabaseClient, fund_codes: list[str]) -> int:
     )
 
 def sync_market_quotes(client: SupabaseClient, market: str) -> int:
-    if market == "US":
-        item_count = 0
+    item_count = 0
 
-        def upsert_round(df: pd.DataFrame) -> None:
-            nonlocal item_count
-            item_count += _upsert_market_quote_dataframe(client, market, df)
+    def upsert_round(df: pd.DataFrame) -> None:
+        nonlocal item_count
+        item_count += _upsert_market_quote_dataframe(client, market, df)
 
-        _fetch_us_quotes(on_round=upsert_round)
-        return item_count
-
-    df = {
-        "CN": ak.stock_zh_a_spot_em,
-        "HK": ak.stock_hk_spot_em,
-    }[market]()
-    return _upsert_market_quote_dataframe(client, market, df)
+    fetch_quotes = {
+        "CN": _fetch_cn_quotes,
+        "HK": _fetch_hk_quotes,
+        "US": _fetch_us_quotes,
+    }[market]
+    fetch_quotes(on_round=upsert_round)
+    return item_count
 
 
 def _upsert_market_quote_dataframe(
@@ -444,12 +442,50 @@ def _upsert_market_quote_dataframe(
     return client.upsert("market_quotes", rows, "market,symbol")
 
 
+def _fetch_cn_quotes(
+    request_get: Callable[..., requests.Response] = requests.get,
+    on_round: Callable[[pd.DataFrame], None] | None = None,
+) -> pd.DataFrame:
+    return _fetch_market_quote_pages("CN", request_get, on_round)
+
+
+def _fetch_hk_quotes(
+    request_get: Callable[..., requests.Response] = requests.get,
+    on_round: Callable[[pd.DataFrame], None] | None = None,
+) -> pd.DataFrame:
+    return _fetch_market_quote_pages("HK", request_get, on_round)
+
+
 def _fetch_us_quotes(
     request_get: Callable[..., requests.Response] = requests.get,
     on_round: Callable[[pd.DataFrame], None] | None = None,
 ) -> pd.DataFrame:
-    """Fetch EastMoney US quotes while retaining completed page progress."""
-    url = "https://72.push2.eastmoney.com/api/qt/clist/get"
+    return _fetch_market_quote_pages("US", request_get, on_round)
+
+
+def _fetch_market_quote_pages(
+    market: str,
+    request_get: Callable[..., requests.Response],
+    on_round: Callable[[pd.DataFrame], None] | None,
+) -> pd.DataFrame:
+    """Fetch EastMoney quotes while retaining completed page progress."""
+    config = {
+        "CN": {
+            "url": "https://82.push2.eastmoney.com/api/qt/clist/get",
+            "fs": "m:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23,m:0 t:81 s:2048",
+            "fields": "f2,f3,f12,f14,f18",
+        },
+        "HK": {
+            "url": "https://72.push2.eastmoney.com/api/qt/clist/get",
+            "fs": "m:128 t:3,m:128 t:4,m:128 t:1,m:128 t:2",
+            "fields": "f2,f3,f12,f14,f18",
+        },
+        "US": {
+            "url": "https://72.push2.eastmoney.com/api/qt/clist/get",
+            "fs": "m:105,m:106,m:107",
+            "fields": "f2,f3,f12,f13,f14,f18",
+        },
+    }[market]
     base_params = {
         "pn": "1",
         "pz": "100",
@@ -459,40 +495,52 @@ def _fetch_us_quotes(
         "fltt": "2",
         "invt": "2",
         "fid": "f12",
-        "fs": "m:105,m:106,m:107",
-        "fields": "f2,f3,f12,f13,f14,f18",
+        "fs": config["fs"],
+        "fields": config["fields"],
     }
     raw_rows: list[dict[str, Any]] = []
     failed_pages: list[int] = []
     configured_pages = [
         int(item.strip())
-        for item in os.getenv("US_QUOTE_PAGES", "").split(",")
+        for item in os.getenv(f"{market}_QUOTE_PAGES", "").split(",")
         if item.strip()
     ]
+    max_pages = (
+        US_QUOTE_MAX_PAGES
+        if market == "US"
+        else max(0, int(os.getenv(f"{market}_QUOTE_MAX_PAGES", "0")))
+    )
 
     if configured_pages:
         requested_pages = configured_pages
         initial_pages = requested_pages
-    elif US_QUOTE_MAX_PAGES:
-        requested_pages = list(range(1, US_QUOTE_MAX_PAGES + 1))
+    elif max_pages:
+        requested_pages = list(range(1, max_pages + 1))
         initial_pages = requested_pages
     else:
         discovery_page = 1
         while True:
             params = {**base_params, "pn": str(discovery_page)}
             try:
-                response = _get_us_quote_page(request_get, url, params)
-            except RequestException:
+                response = _get_us_quote_page(request_get, config["url"], params)
+                data = _parse_quote_page_response(response)
+                total_value = data.get("total")
+                total = (
+                    int(total_value)
+                    if total_value is not None
+                    else len(data["diff"])
+                )
+                if total < len(data["diff"]):
+                    raise ValueError("Quote response total is smaller than page data")
+            except (RequestException, TypeError, ValueError):
                 failed_pages.append(discovery_page)
                 discovery_page += 1
                 if discovery_page > 10:
                     raise RuntimeError(
-                        "Unable to discover US quote page count after 10 pages"
+                        f"Unable to discover {market} quote page count after 10 pages"
                     )
                 continue
-            data = response.json().get("data") or {}
-            raw_rows.extend(data.get("diff") or [])
-            total = int(data.get("total") or len(raw_rows))
+            raw_rows.extend(data["diff"])
             total_pages = max(1, math.ceil(total / int(base_params["pz"])))
             break
         requested_pages = list(range(1, total_pages + 1))
@@ -501,20 +549,19 @@ def _fetch_us_quotes(
     for page_number in initial_pages:
         params = {**base_params, "pn": str(page_number)}
         try:
-            response = _get_us_quote_page(request_get, url, params)
-        except RequestException:
+            response = _get_us_quote_page(request_get, config["url"], params)
+            data = _parse_quote_page_response(response)
+        except (RequestException, ValueError):
             failed_pages.append(page_number)
             continue
-        data = response.json().get("data") or {}
-        raw_rows.extend(data.get("diff") or [])
+        raw_rows.extend(data["diff"])
         if US_QUOTE_PAGE_DELAY_SECONDS > 0:
             time.sleep(US_QUOTE_PAGE_DELAY_SECONDS)
 
-    initial_row_count = len(raw_rows)
-    initial_frame = _us_quote_rows_to_dataframe(raw_rows[:initial_row_count])
+    initial_frame = _quote_rows_to_dataframe(market, raw_rows)
     if on_round:
         on_round(initial_frame)
-    _print_us_quote_round_summary(1, requested_pages, failed_pages)
+    _print_quote_round_summary(market, 1, requested_pages, failed_pages)
 
     round_number = 2
     while failed_pages:
@@ -524,49 +571,44 @@ def _fetch_us_quotes(
         for page_number in retry_pages:
             params = {**base_params, "pn": str(page_number)}
             try:
-                response = _get_us_quote_page(request_get, url, params)
-            except RequestException:
+                response = _get_us_quote_page(request_get, config["url"], params)
+                data = _parse_quote_page_response(response)
+            except (RequestException, ValueError):
                 failed_pages.append(page_number)
                 continue
-            data = response.json().get("data") or {}
-            page_rows = data.get("diff") or []
+            page_rows = data["diff"]
             round_rows.extend(page_rows)
             raw_rows.extend(page_rows)
             if US_QUOTE_PAGE_DELAY_SECONDS > 0:
                 time.sleep(US_QUOTE_PAGE_DELAY_SECONDS)
 
-        round_frame = _us_quote_rows_to_dataframe(round_rows)
+        round_frame = _quote_rows_to_dataframe(market, round_rows)
         if on_round:
             on_round(round_frame)
-        _print_us_quote_round_summary(round_number, retry_pages, failed_pages)
+        _print_quote_round_summary(
+            market,
+            round_number,
+            retry_pages,
+            failed_pages,
+        )
         round_number += 1
 
-    return _us_quote_rows_to_dataframe(raw_rows)
+    return _quote_rows_to_dataframe(market, raw_rows)
 
 
-def _print_us_quote_round_summary(
-    round_number: int,
-    requested_pages: list[int],
-    failed_pages: list[int],
-) -> None:
-    failed_page_numbers = ",".join(str(item) for item in failed_pages) or "none"
-    print(
-        "US quote round summary: "
-        f"round={round_number} "
-        f"requested_pages={len(requested_pages)} "
-        f"successful_pages={len(requested_pages) - len(failed_pages)} "
-        f"failed_pages={len(failed_pages)} "
-        f"failed_page_numbers={failed_page_numbers}",
-        flush=True,
-    )
-
-
-def _us_quote_rows_to_dataframe(raw_rows: list[dict[str, Any]]) -> pd.DataFrame:
+def _quote_rows_to_dataframe(
+    market: str,
+    raw_rows: list[dict[str, Any]],
+) -> pd.DataFrame:
     columns = ["代码", "名称", "最新价", "昨收", "涨跌幅"]
     return pd.DataFrame(
         [
             {
-                "代码": f"{row.get('f13')}.{row.get('f12')}",
+                "代码": (
+                    f"{row.get('f13')}.{row.get('f12')}"
+                    if market == "US"
+                    else row.get("f12")
+                ),
                 "名称": row.get("f14"),
                 "最新价": row.get("f2"),
                 "昨收": row.get("f18"),
@@ -576,6 +618,34 @@ def _us_quote_rows_to_dataframe(raw_rows: list[dict[str, Any]]) -> pd.DataFrame:
         ],
         columns=columns,
     )
+
+
+def _print_quote_round_summary(
+    market: str,
+    round_number: int,
+    requested_pages: list[int],
+    failed_pages: list[int],
+) -> None:
+    failed_page_numbers = ",".join(str(item) for item in failed_pages) or "none"
+    print(
+        f"{market} quote round summary: "
+        f"round={round_number} "
+        f"requested_pages={len(requested_pages)} "
+        f"successful_pages={len(requested_pages) - len(failed_pages)} "
+        f"failed_pages={len(failed_pages)} "
+        f"failed_page_numbers={failed_page_numbers}",
+        flush=True,
+    )
+
+
+def _parse_quote_page_response(response: requests.Response) -> dict[str, Any]:
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Quote response must be a JSON object")
+    data = payload.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("diff"), list):
+        raise ValueError("Quote response must contain a data.diff list")
+    return data
 
 
 def _get_us_quote_page(
