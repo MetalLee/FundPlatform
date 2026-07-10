@@ -57,7 +57,7 @@ export function EstimatedChangeCard({
           {estimatedChangePct === null ? (
             <Badge variant="outline">{labels.noEstimate}</Badge>
           ) : (
-            <ChangeBadge value={estimatedChangePct / 100} />
+            <ChangeBadge value={estimatedChangePct / 100} locale={locale} />
           )}
         </div>
       </CardHeader>
@@ -69,7 +69,7 @@ export function EstimatedChangeCard({
               estimatedChangePct === null ? (
                 labels.noEstimate
               ) : (
-                <PercentText value={estimatedChangePct / 100} signed />
+                <ChangeBadge value={estimatedChangePct / 100} locale={locale} />
               )
             }
           />
@@ -107,9 +107,7 @@ export function EstimatedChangeCard({
               ))}
             </ul>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              {labels.noWarnings}
-            </p>
+            <p className="text-xs text-muted-foreground">{labels.noWarnings}</p>
           )}
         </div>
       </CardContent>
@@ -117,13 +115,7 @@ export function EstimatedChangeCard({
   )
 }
 
-function EstimateMeta({
-  label,
-  value,
-}: {
-  label: string
-  value: ReactNode
-}) {
+function EstimateMeta({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-md border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>

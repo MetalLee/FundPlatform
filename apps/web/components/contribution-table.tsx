@@ -38,12 +38,14 @@ type ContributionTableProps = {
   rows: ContributionRow[]
   labels: ContributionTableLabels
   unknownLabel: string
+  locale: string
 }
 
 export function ContributionTable({
   rows,
   labels,
   unknownLabel,
+  locale,
 }: ContributionTableProps) {
   if (rows.length === 0) {
     return (
@@ -61,8 +63,12 @@ export function ContributionTable({
           <TableHead>{labels.columns.symbol}</TableHead>
           <TableHead>{labels.columns.name}</TableHead>
           <TableHead>{labels.columns.market}</TableHead>
-          <TableHead className="text-right">{labels.columns.weightPct}</TableHead>
-          <TableHead className="text-right">{labels.columns.changePct}</TableHead>
+          <TableHead className="text-right">
+            {labels.columns.weightPct}
+          </TableHead>
+          <TableHead className="text-right">
+            {labels.columns.changePct}
+          </TableHead>
           <TableHead className="text-right">
             {labels.columns.contributionPct}
           </TableHead>
@@ -80,7 +86,7 @@ export function ContributionTable({
               <PercentText value={row.weightPct / 100} />
             </TableCell>
             <TableCell className="text-right">
-              <ChangeBadge value={row.changePct / 100} />
+              <ChangeBadge value={row.changePct / 100} locale={locale} />
             </TableCell>
             <TableCell className="text-right">
               <PercentText value={row.contributionPct / 100} signed />

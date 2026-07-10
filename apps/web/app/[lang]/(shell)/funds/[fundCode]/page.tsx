@@ -20,7 +20,11 @@ import {
   type FundDetail as FundDetailData,
   type FreshnessWarningCode,
 } from "@/lib/services/fund-service"
-import type { Database, Json } from "@/lib/supabase/types"
+import {
+  calculateHoldingEstimate,
+  findQuoteForHolding,
+} from "@/lib/services/quote-matcher"
+import type { Database } from "@/lib/supabase/types"
 
 import { getDictionary, hasLocale } from "../../../dictionaries"
 
@@ -46,34 +50,34 @@ export default async function FundDetailPage({
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <PageTitle
-          lang={lang}
-          title={`${dict.fundDetail.titlePrefix} ${fundCode}`}
-          description={dict.fundDetail.description}
-          backToList={dict.fundDetail.backToList}
-        />
-        <RiskNotice
-          title={dict.riskNotice.title}
-          description={dict.riskNotice.description}
-        />
+      <PageTitle
+        lang={lang}
+        title={`${dict.fundDetail.titlePrefix} ${fundCode}`}
+        description={dict.fundDetail.description}
+        backToList={dict.fundDetail.backToList}
+      />
+      <RiskNotice
+        title={dict.riskNotice.title}
+        description={dict.riskNotice.description}
+      />
 
-        {!detailResponse.ok ? (
-          <ErrorState
-            title={dict.fundDetail.loadErrorTitle}
-            description={dict.fundDetail.loadErrorDescription}
-          />
-        ) : detailResponse.data.fund === null ? (
-          <EmptyState
-            title={dict.fundDetail.emptyTitle}
-            description={dict.fundDetail.emptyDescription}
-          />
-        ) : (
-          <FundDetailContent
-            detail={detailResponse.data}
-            lang={lang}
-            labels={dict.fundDetail}
-          />
-        )}
+      {!detailResponse.ok ? (
+        <ErrorState
+          title={dict.fundDetail.loadErrorTitle}
+          description={dict.fundDetail.loadErrorDescription}
+        />
+      ) : detailResponse.data.fund === null ? (
+        <EmptyState
+          title={dict.fundDetail.emptyTitle}
+          description={dict.fundDetail.emptyDescription}
+        />
+      ) : (
+        <FundDetailContent
+          detail={detailResponse.data}
+          lang={lang}
+          labels={dict.fundDetail}
+        />
+      )}
     </div>
   )
 }
@@ -118,17 +122,14 @@ function FundDetailContent({
 }) {
   const locale = lang === "zh" ? "zh-CN" : "en-US"
   const contributionRows = buildContributionRows(detail.holdings, detail.quotes)
-  const warnings = buildWarnings(
-    detail.latestEstimate?.warnings,
-    detail.freshnessWarnings,
-    labels.estimate,
+  const currentEstimate = calculateHoldingEstimate(
+    detail.holdings,
+    detail.quotes,
   )
-  const estimatedChangePct = toFiniteNumber(
-    detail.latestEstimate?.estimated_change_pct,
-  )
-  const coveredWeightPct =
-    toFiniteNumber(detail.latestEstimate?.covered_weight_pct) ??
-    detail.coverage.coveredWeightPct
+  const warnings = buildWarnings(detail.freshnessWarnings, labels.estimate)
+  const estimatedChangePct =
+    contributionRows.length > 0 ? currentEstimate.estimatedChangePct : null
+  const coveredWeightPct = currentEstimate.coveredWeightPct
 
   return (
     <>
@@ -196,8 +197,10 @@ function FundDetailContent({
       >
         <FundHoldingsTable
           holdings={detail.holdings}
+          quotes={detail.quotes}
           labels={labels.holdings}
           unknownLabel={labels.fields.unknown}
+          locale={locale}
         />
       </DataCard>
 
@@ -209,6 +212,7 @@ function FundDetailContent({
           rows={contributionRows}
           labels={labels.contributions}
           unknownLabel={labels.fields.unknown}
+          locale={locale}
         />
       </DataCard>
     </>
@@ -227,9 +231,7 @@ function FundMeta({
   return (
     <div className="rounded-md border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 font-medium tabular-nums">
-        {value ?? emptyValue}
-      </div>
+      <div className="mt-1 font-medium tabular-nums">{value ?? emptyValue}</div>
     </div>
   )
 }
@@ -238,15 +240,10 @@ function buildContributionRows(
   holdings: FundHolding[],
   quotes: MarketQuote[],
 ): ContributionRow[] {
-  const quoteMap = new Map(
-    quotes.map((quote) => [`${quote.market}:${quote.symbol}`, quote]),
-  )
-
   return holdings
     .filter((holding) => holding.asset_type === "stock")
     .flatMap((holding) => {
-      const market = holding.market ?? "OTHER"
-      const quote = quoteMap.get(`${market}:${holding.symbol}`)
+      const quote = findQuoteForHolding(holding, quotes)
       const changePct = toFiniteNumber(quote?.change_pct)
 
       if (!quote || changePct === null) {
@@ -257,8 +254,8 @@ function buildContributionRows(
 
       return [
         {
-          market,
-          symbol: holding.symbol,
+          market: quote.market,
+          symbol: quote.symbol,
           name: holding.name ?? quote.name,
           weightPct,
           changePct,
@@ -273,19 +270,10 @@ function buildContributionRows(
 }
 
 function buildWarnings(
-  value: Json | undefined,
   freshnessWarnings: FreshnessWarningCode[],
   labels: ReturnType<typeof getDictionary>["fundDetail"]["estimate"],
 ) {
   const warnings = new Set<string>()
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      if (typeof item === "string") {
-        warnings.add(item)
-      }
-    }
-  }
 
   for (const warning of freshnessWarnings) {
     warnings.add(mapFreshnessWarning(warning, labels))
@@ -347,6 +335,10 @@ function buildLastUpdatedAt(detail: FundDetailData) {
 }
 
 function toFiniteNumber(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
   const numberValue = Number(value)
 
   return Number.isFinite(numberValue) ? numberValue : null

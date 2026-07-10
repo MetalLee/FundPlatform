@@ -15,6 +15,10 @@ import {
 } from "@/lib/utils/code-normalizer"
 
 import { getLatestHoldings } from "./holding-service"
+import {
+  buildQuoteSymbolCandidates,
+  findQuoteForHolding,
+} from "./quote-matcher"
 
 type FundHoldingRow = Database["public"]["Tables"]["fund_holdings"]["Row"]
 type MarketQuoteRow = Database["public"]["Tables"]["market_quotes"]["Row"]
@@ -103,8 +107,11 @@ export async function getQuotesForHoldings(
     const stockItems = holdings
       .filter((holding) => holding.asset_type === "stock")
       .map((holding) => ({
+        asset_type: holding.asset_type,
         symbol: holding.symbol,
         market: holding.market ?? "OTHER",
+        name: holding.name,
+        weight_pct: holding.weight_pct,
       }))
 
     if (stockItems.length === 0) {
@@ -112,43 +119,61 @@ export async function getQuotesForHoldings(
     }
 
     const supabase = createSupabaseAdminClient()
-    const quotes: MarketQuoteRow[] = []
+    const quoteCandidates = new Map<string, MarketQuoteRow>()
+    const symbols = buildQuoteSymbolCandidates(
+      stockItems.map((item) => normalizeSymbol(item.symbol)),
+    )
+    const names = Array.from(
+      new Set(
+        stockItems
+          .map((item) => item.name?.trim())
+          .filter((name): name is string => Boolean(name)),
+      ),
+    )
 
-    for (const marketItems of groupByMarket(
-      dedupeQuoteItems(stockItems),
-    ).values()) {
-      const symbols = marketItems.map((item) => item.symbol)
-      const market = marketItems[0]?.market
+    const candidateQueries = [
+      supabase.from("market_quotes").select().in("symbol", symbols),
+      ...(names.length > 0
+        ? [supabase.from("market_quotes").select().in("name", names)]
+        : []),
+    ]
 
-      if (!market) {
-        continue
+    const candidateResponses = await Promise.all(candidateQueries)
+
+    for (const response of candidateResponses) {
+      if (response.error) {
+        return failure(
+          "SUPABASE_QUOTES_READ_FAILED",
+          response.error.message,
+          response.error,
+        )
       }
 
-      const { data, error } = await supabase
-        .from("market_quotes")
-        .select()
-        .eq("market", market)
-        .in("symbol", symbols)
-
-      if (error) {
-        return failure("SUPABASE_QUOTES_READ_FAILED", error.message, error)
+      for (const quote of response.data ?? []) {
+        quoteCandidates.set(`${quote.market}:${quote.symbol}`, quote)
       }
-
-      quotes.push(...(data ?? []))
     }
 
+    let quotes = matchQuotesForHoldings(
+      stockItems,
+      Array.from(quoteCandidates.values()),
+    )
+
     if (shouldUseMockData() && quotes.length < stockItems.length) {
-      const mockQuotesResponse = await getMockQuotes(stockItems)
+      const matchedHoldings = new Set(
+        quotes.map((quote) => `${quote.market}:${quote.symbol}`),
+      )
+      const missingItems = stockItems.filter((holding) => {
+        const quote = findQuoteForHolding(holding, quotes)
+        return !quote || !matchedHoldings.has(`${quote.market}:${quote.symbol}`)
+      })
+      const mockQuotesResponse = await getMockQuotes(missingItems)
 
       if (mockQuotesResponse.ok) {
-        const existingKeys = new Set(
-          quotes.map((quote) => `${quote.market}:${quote.symbol}`),
-        )
-        quotes.push(
-          ...mockQuotesResponse.data.filter(
-            (quote) => !existingKeys.has(`${quote.market}:${quote.symbol}`),
-          ),
-        )
+        quotes = matchQuotesForHoldings(stockItems, [
+          ...quotes,
+          ...mockQuotesResponse.data,
+        ])
       }
     }
 
@@ -156,6 +181,29 @@ export async function getQuotesForHoldings(
   } catch (error) {
     return toFailure("GET_QUOTES_FOR_HOLDINGS_FAILED", error)
   }
+}
+
+function matchQuotesForHoldings(
+  holdings: Array<{
+    asset_type: string
+    market: string
+    symbol: string
+    name: string | null
+    weight_pct: number | null
+  }>,
+  candidates: MarketQuoteRow[],
+) {
+  const matches = new Map<string, MarketQuoteRow>()
+
+  for (const holding of holdings) {
+    const quote = findQuoteForHolding(holding, candidates)
+
+    if (quote) {
+      matches.set(`${quote.market}:${quote.symbol}`, quote)
+    }
+  }
+
+  return Array.from(matches.values())
 }
 
 export async function getCachedQuotesForSymbols(

@@ -58,8 +58,7 @@ const zh = {
     passwordTooShort: "密码至少需要 6 个字符。",
     passwordMismatch: "两次输入的密码不一致。",
     requestFailed: "认证请求失败，请稍后重试。",
-    unconfirmed:
-      "邮箱尚未确认。请先打开确认邮件完成验证，然后再登录。",
+    unconfirmed: "邮箱尚未确认。请先打开确认邮件完成验证，然后再登录。",
   },
   riskNotice: {
     title: "风险提示",
@@ -95,7 +94,8 @@ const zh = {
     chartDescription: "预留后续收益率曲线和风险暴露图表。",
     chartPlaceholder: "图表区域",
     freshnessTitle: "数据新鲜度",
-    freshnessDescription: "展示 GitHub Actions worker 写入 Supabase 缓存后的最近同步信息。",
+    freshnessDescription:
+      "展示 GitHub Actions worker 写入 Supabase 缓存后的最近同步信息。",
     freshnessLastSyncedAt: "最后同步时间",
     freshnessDataSource: "数据源",
     metrics: {
@@ -233,7 +233,8 @@ const zh = {
       quoteStale: "行情缓存已过期，估算仍使用最近一次可用行情。",
       holdingStale: "公开披露持仓已过期，估算仍使用最近一次可用持仓。",
       lowCoverage: "公开持仓覆盖比例不足，估算解释力有限。",
-      workerFailed: "最近一次 worker 同步失败，请查看 data_sync_logs 审计日志。",
+      workerFailed:
+        "最近一次 worker 同步失败，请查看 data_sync_logs 审计日志。",
       workerStale: "worker 已长时间未运行，请检查 GitHub Actions schedule。",
     },
     holdings: {
@@ -247,8 +248,13 @@ const zh = {
         market: "市场",
         assetType: "资产类型",
         weightPct: "持仓占比",
+        changePct: "当日涨跌幅",
         reportPeriod: "报告期",
-        source: "数据源",
+      },
+      assetTypes: {
+        stock: "股票",
+        bond: "债券",
+        other: "其他",
       },
     },
     contributions: {
@@ -396,7 +402,8 @@ const en: typeof zh = {
   },
   auth: {
     loginTitle: "Log in",
-    loginDescription: "Use a confirmed email address to enter your fund workspace.",
+    loginDescription:
+      "Use a confirmed email address to enter your fund workspace.",
     registerTitle: "Register",
     registerDescription:
       "Create an account, then confirm your email before entering the app.",
@@ -624,8 +631,13 @@ const en: typeof zh = {
         market: "Market",
         assetType: "Asset type",
         weightPct: "Weight",
+        changePct: "Daily change",
         reportPeriod: "Report period",
-        source: "Source",
+      },
+      assetTypes: {
+        stock: "Stock",
+        bond: "Bond",
+        other: "Other",
       },
     },
     contributions: {

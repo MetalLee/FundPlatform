@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react"
@@ -15,6 +16,7 @@ import {
   CardTitle,
 } from "@workspace/ui/components/card"
 
+import { ChangeBadge } from "@/components/finance/change-badge"
 import type { Database } from "@/lib/supabase/types"
 import { cn } from "@/lib/utils/cn"
 import { PendingLink } from "@/components/pending-link"
@@ -122,16 +124,14 @@ export function FundCard({ fund, lang, labels }: FundCardProps) {
         <FundMeta
           label={labels.fields.latestNavChange}
           value={
-            fund.latest_nav_change_pct === null
-              ? null
-              : `${formatSignedNumber(fund.latest_nav_change_pct)}%`
+            fund.latest_nav_change_pct === null ? null : (
+              <ChangeBadge
+                value={fund.latest_nav_change_pct / 100}
+                locale={lang}
+              />
+            )
           }
           emptyValue={labels.fields.unknown}
-          valueClassName={cn(
-            Number(fund.latest_nav_change_pct ?? 0) > 0 &&
-              "text-emerald-700 dark:text-emerald-400",
-            Number(fund.latest_nav_change_pct ?? 0) < 0 && "text-destructive",
-          )}
         />
         <FundMeta
           label={labels.fields.lastSyncedAt}
@@ -184,7 +184,7 @@ function FundMeta({
   valueClassName,
 }: {
   label: string
-  value: string | number | null | undefined
+  value: ReactNode
   emptyValue?: string
   valueClassName?: string
 }) {
@@ -207,15 +207,6 @@ function formatNumberValue(value: number | null) {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
   }).format(value)
-}
-
-function formatSignedNumber(value: number) {
-  const formatted = new Intl.NumberFormat("zh-CN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
-
-  return value > 0 ? `+${formatted}` : formatted
 }
 
 function formatDateTime(value: string | null, locale: string) {

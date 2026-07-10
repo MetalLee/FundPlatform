@@ -40,34 +40,32 @@ export default async function PortfolioPage({
   const hasLoadError = !fundsResponse.ok || !positionsResponse.ok
   const funds = fundsResponse.ok ? dedupeFunds(fundsResponse.data) : []
   const positions = positionsResponse.ok ? positionsResponse.data : []
-  const items = hasLoadError
-    ? []
-    : await buildPortfolioItems(funds, positions)
+  const items = hasLoadError ? [] : await buildPortfolioItems(funds, positions)
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <PageHeader
-          title={dict.portfolio.title}
-          description={dict.portfolio.description}
-        />
-        <RiskNotice
-          title={dict.riskNotice.title}
-          description={dict.riskNotice.description}
-        />
+      <PageHeader
+        title={dict.portfolio.title}
+        description={dict.portfolio.description}
+      />
+      <RiskNotice
+        title={dict.riskNotice.title}
+        description={dict.riskNotice.description}
+      />
 
-        {hasLoadError ? (
-          <ErrorState
-            title={dict.portfolio.loadErrorTitle}
-            description={dict.portfolio.loadErrorDescription}
-          />
-        ) : items.length === 0 ? (
-          <EmptyState
-            title={dict.portfolio.emptyTitle}
-            description={dict.portfolio.emptyDescription}
-          />
-        ) : (
-          <PortfolioSummary items={items} labels={dict.portfolio} />
-        )}
+      {hasLoadError ? (
+        <ErrorState
+          title={dict.portfolio.loadErrorTitle}
+          description={dict.portfolio.loadErrorDescription}
+        />
+      ) : items.length === 0 ? (
+        <EmptyState
+          title={dict.portfolio.emptyTitle}
+          description={dict.portfolio.emptyDescription}
+        />
+      ) : (
+        <PortfolioSummary items={items} labels={dict.portfolio} locale={lang} />
+      )}
     </div>
   )
 }

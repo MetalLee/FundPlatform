@@ -12,7 +12,7 @@ import akshare as ak
 import pandas as pd
 from requests.exceptions import RequestException
 
-from .estimates import calculate_fund_estimate
+from .estimates import calculate_fund_estimate, quote_symbol_candidates
 from .supabase import SupabaseClient
 from .transform import (
     first_value,
@@ -205,6 +205,11 @@ def sync_latest_nav(client: SupabaseClient, fund_codes: list[str] | None) -> int
         parsed_nav_date = to_date(selected_nav_date)
         if not parsed_nav_date:
             continue
+        nav_change_pct = to_float(first_value(row, ["日增长率", "增长率"]))
+        used_history_fallback = False
+        if nav_change_pct is None and wanted is not None:
+            nav_change_pct = _nav_change_from_history(code, parsed_nav_date)
+            used_history_fallback = nav_change_pct is not None
 
         rows.append(
             {
@@ -212,14 +217,36 @@ def sync_latest_nav(client: SupabaseClient, fund_codes: list[str] | None) -> int
                 "nav_date": parsed_nav_date,
                 "nav": selected_nav,
                 "accumulated_nav": selected_accumulated_nav,
-                "nav_change_pct": to_float(first_value(row, ["日增长率", "增长率"])),
-                "data_source": "akshare:fund_open_fund_daily_em",
+                "nav_change_pct": nav_change_pct,
+                "data_source": (
+                    "akshare:fund_open_fund_daily_em,fund_open_fund_info_em"
+                    if used_history_fallback
+                    else "akshare:fund_open_fund_daily_em"
+                ),
                 "last_synced_at": synced_at,
             }
     )
 
     ensure_funds(client, [row["fund_code"] for row in rows])
     return client.upsert("fund_navs", rows, "fund_code,nav_date")
+
+
+def _nav_change_from_history(fund_code: str, nav_date: str) -> float | None:
+    try:
+        history = _safe_akshare_call(
+            f"fund_open_fund_info_em(symbol={fund_code}, indicator=单位净值走势)",
+            lambda: ak.fund_open_fund_info_em(
+                symbol=fund_code,
+                indicator="单位净值走势",
+            ),
+        )
+        for _, history_row in history.iterrows():
+            if to_date(first_value(history_row, ["净值日期", "日期"])) == nav_date:
+                return to_float(first_value(history_row, ["日增长率", "涨跌幅"]))
+    except Exception:
+        return None
+
+    return None
 
 
 def sync_nav_history(client: SupabaseClient, fund_codes: list[str]) -> int:
@@ -606,26 +633,38 @@ def recalculate_estimates(
                 "order": "weight_pct.desc",
             },
         )
-        quote_keys = {
-            (holding.get("market"), holding.get("symbol"))
+        holding_symbols = sorted({
+            normalize_symbol(holding.get("symbol"))
             for holding in holdings
-            if holding.get("asset_type") == "stock"
-        }
-        quotes: list[dict] = []
-
-        for market, symbol in quote_keys:
-            if not market or not symbol:
-                continue
-            quotes.extend(
-                client.select(
-                    "market_quotes",
-                    {
-                        "select": "*",
-                        "market": f"eq.{market}",
-                        "symbol": f"eq.{symbol}",
-                    },
-                )
-            )
+            if holding.get("asset_type") == "stock" and holding.get("symbol")
+        })
+        holding_names = sorted({
+            str(holding.get("name")).strip()
+            for holding in holdings
+            if holding.get("asset_type") == "stock" and holding.get("name")
+        })
+        candidates = quote_symbol_candidates(holding_symbols)
+        quote_candidates: list[dict] = []
+        if candidates:
+            quote_candidates.extend(client.select(
+                "market_quotes",
+                {
+                    "select": "*",
+                    "symbol": _postgrest_in_filter(candidates),
+                },
+            ))
+        if holding_names:
+            quote_candidates.extend(client.select(
+                "market_quotes",
+                {
+                    "select": "*",
+                    "name": _postgrest_in_filter(holding_names),
+                },
+            ))
+        quotes = list({
+            f"{quote.get('market')}:{quote.get('symbol')}": quote
+            for quote in quote_candidates
+        }.values())
 
         rows.append(calculate_fund_estimate(code, holdings, quotes, estimate_date))
 
@@ -642,6 +681,14 @@ def _quote_function_name(market: str) -> str:
         "HK": "stock_hk_spot_em",
         "US": "stock_us_spot_em",
     }[market]
+
+
+def _postgrest_in_filter(values: list[str]) -> str:
+    encoded_values = [
+        '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+        for value in values
+    ]
+    return f"in.({','.join(encoded_values)})"
 
 
 def ensure_funds(client: SupabaseClient, fund_codes: list[str]) -> None:

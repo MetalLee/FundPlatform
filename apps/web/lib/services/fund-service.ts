@@ -16,6 +16,7 @@ import {
   type HoldingCoverage,
 } from "./holding-service"
 import { getQuotesForHoldings } from "./market-service"
+import { calculateHoldingEstimate } from "./quote-matcher"
 
 type TrackedFundRow = Database["public"]["Tables"]["tracked_funds"]["Row"]
 type UserTrackedFundRow =
@@ -159,7 +160,11 @@ export async function addTrackedFund(
       .single()
 
     if (error) {
-      return failure("SUPABASE_USER_TRACKED_FUND_UPSERT_FAILED", error.message, error)
+      return failure(
+        "SUPABASE_USER_TRACKED_FUND_UPSERT_FAILED",
+        error.message,
+        error,
+      )
     }
 
     const { error: fundError } = await supabase
@@ -169,7 +174,11 @@ export async function addTrackedFund(
       })
 
     if (fundError) {
-      return failure("SUPABASE_PENDING_FUND_UPSERT_FAILED", fundError.message, fundError)
+      return failure(
+        "SUPABASE_PENDING_FUND_UPSERT_FAILED",
+        fundError.message,
+        fundError,
+      )
     }
 
     const dispatchResponse = await dispatchFundSyncWorkflow({
@@ -185,7 +194,9 @@ export async function addTrackedFund(
 
     return success({
       trackedFund: data,
-      fund: detailResponse.data.fund ?? createPlaceholderFund(normalizedFundCode, userId),
+      fund:
+        detailResponse.data.fund ??
+        createPlaceholderFund(normalizedFundCode, userId),
       warnings: [
         ...detailResponse.data.freshnessWarnings,
         ...(dispatchResponse.ok ? [] : [dispatchResponse.error.code]),
@@ -249,7 +260,10 @@ export async function getSharedTrackedFunds(): Promise<
 > {
   try {
     const supabase = createSupabaseAdminClient()
-    const { data, error } = await supabase.from("funds").select().order("fund_code")
+    const { data, error } = await supabase
+      .from("funds")
+      .select()
+      .order("fund_code")
 
     if (error) {
       return failure("SUPABASE_SHARED_FUNDS_READ_FAILED", error.message, error)
@@ -288,6 +302,11 @@ export async function getFundDetail(
     if (!quotesResponse.ok) {
       return quotesResponse
     }
+
+    const currentEstimate = calculateHoldingEstimate(
+      holdingsResponse.data,
+      quotesResponse.data,
+    )
 
     const coverageResponse = await getHoldingCoverage(normalizedFundCode)
 
@@ -342,8 +361,13 @@ export async function getFundDetail(
     const latestSync = [
       fundResponse.data.last_synced_at,
       ...holdingsResponse.data.map((holding) => holding.last_synced_at),
-      ...quotesResponse.data.map((quote) => quote.last_synced_at ?? quote.quote_time),
-    ].filter(Boolean).sort().at(-1)
+      ...quotesResponse.data.map(
+        (quote) => quote.last_synced_at ?? quote.quote_time,
+      ),
+    ]
+      .filter(Boolean)
+      .sort()
+      .at(-1)
 
     return success({
       fund: fundResponse.data,
@@ -359,7 +383,7 @@ export async function getFundDetail(
         holdingReportDates: holdingsResponse.data.map(
           (holding) => holding.source_report_date ?? holding.last_synced_at,
         ),
-        coveredWeightPct: coverageResponse.data.coveredWeightPct,
+        coveredWeightPct: currentEstimate.coveredWeightPct,
         latestSyncLog,
       }),
     })

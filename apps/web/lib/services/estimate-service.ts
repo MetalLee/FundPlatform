@@ -11,6 +11,7 @@ import { normalizeFundCode } from "@/lib/utils/code-normalizer"
 import { getLatestHoldings } from "./holding-service"
 import { getQuotesForHoldings } from "./market-service"
 import { getUserPositions } from "./portfolio-service"
+import { findQuoteForHolding } from "./quote-matcher"
 
 type FundHoldingRow = Database["public"]["Tables"]["fund_holdings"]["Row"]
 type MarketQuoteRow = Database["public"]["Tables"]["market_quotes"]["Row"]
@@ -235,16 +236,10 @@ function calculateContributors(
   holdings: FundHoldingRow[],
   quotes: MarketQuoteRow[],
 ): EstimateContributor[] {
-  const quoteMap = new Map<string, MarketQuoteRow>()
-
-  for (const quote of quotes) {
-    quoteMap.set(`${quote.market}:${quote.symbol}`, quote)
-  }
-
   return holdings
     .filter((holding) => holding.asset_type === "stock")
     .flatMap((holding) => {
-      const quote = quoteMap.get(`${holding.market}:${holding.symbol}`)
+      const quote = findQuoteForHolding(holding, quotes)
       const changePct = Number(quote?.change_pct ?? Number.NaN)
 
       if (!quote || !Number.isFinite(changePct)) {
@@ -255,9 +250,9 @@ function calculateContributors(
 
       return [
         {
-          market: holding.market ?? "OTHER",
-          symbol: holding.symbol,
-          name: holding.name,
+          market: quote.market,
+          symbol: quote.symbol,
+          name: holding.name ?? quote.name,
           weightPct,
           changePct,
           contributionPct: (weightPct * changePct) / 100,

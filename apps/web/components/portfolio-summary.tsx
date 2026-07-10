@@ -5,7 +5,11 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Save } from "lucide-react"
 
-import { Alert, AlertDescription, AlertTitle } from "@workspace/ui/components/alert"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@workspace/ui/components/alert"
 import { Button } from "@workspace/ui/components/button"
 import {
   Card,
@@ -74,6 +78,7 @@ export type PortfolioSummaryLabels = {
 type PortfolioSummaryProps = {
   items: PortfolioFundItem[]
   labels: PortfolioSummaryLabels
+  locale: string
 }
 
 type UpsertResponse = {
@@ -84,7 +89,11 @@ type UpsertResponse = {
   }
 }
 
-export function PortfolioSummary({ items, labels }: PortfolioSummaryProps) {
+export function PortfolioSummary({
+  items,
+  labels,
+  locale,
+}: PortfolioSummaryProps) {
   const totalHoldingAmount = items.reduce(
     (sum, item) => sum + item.position.holdingAmount,
     0,
@@ -124,7 +133,9 @@ export function PortfolioSummary({ items, labels }: PortfolioSummaryProps) {
         <MetricCard
           title={labels.summary.estimatedProfit}
           value={<MoneyText value={estimatedProfitAmount} compact />}
-          trend={<ChangeBadge value={estimatedChangePct / 100} />}
+          trend={
+            <ChangeBadge value={estimatedChangePct / 100} locale={locale} />
+          }
         />
         <MetricCard
           title={labels.summary.estimatedChange}
@@ -149,6 +160,7 @@ export function PortfolioSummary({ items, labels }: PortfolioSummaryProps) {
               key={item.fundCode}
               item={item}
               labels={labels}
+              locale={locale}
             />
           ))}
         </div>
@@ -160,9 +172,11 @@ export function PortfolioSummary({ items, labels }: PortfolioSummaryProps) {
 function PortfolioPositionCard({
   item,
   labels,
+  locale,
 }: {
   item: PortfolioFundItem
   labels: PortfolioSummaryLabels
+  locale: string
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -225,7 +239,10 @@ function PortfolioPositionCard({
               {item.fundType ? ` · ${item.fundType}` : ""}
             </CardDescription>
           </div>
-          <ChangeBadge value={item.estimate.estimatedChangePct / 100} />
+          <ChangeBadge
+            value={item.estimate.estimatedChangePct / 100}
+            locale={locale}
+          />
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -347,13 +364,7 @@ function NumberField({
   )
 }
 
-function PositionMetric({
-  label,
-  value,
-}: {
-  label: string
-  value: ReactNode
-}) {
+function PositionMetric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-md border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>

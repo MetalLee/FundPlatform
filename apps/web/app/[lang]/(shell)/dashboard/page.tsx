@@ -85,9 +85,119 @@ export default async function DashboardPage({
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-        <PageHeader
-          title={dict.dashboard.title}
-          description={dict.dashboard.description}
+      <PageHeader
+        title={dict.dashboard.title}
+        description={dict.dashboard.description}
+        action={
+          <Button
+            nativeButton={false}
+            render={<PendingLink href={`/${lang}/funds`} />}
+          >
+            <Plus className="size-4" />
+            {dict.dashboard.addFund}
+          </Button>
+        }
+      />
+
+      <RiskNotice
+        title={dict.riskNotice.title}
+        description={dict.riskNotice.description}
+      />
+
+      <DataCard
+        title={dict.dashboard.freshnessTitle}
+        description={dict.dashboard.freshnessDescription}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <DashboardMeta
+            label={dict.dashboard.freshnessLastSyncedAt}
+            value={formatDateTime(freshness.lastSyncedAt, lang)}
+          />
+          <DashboardMeta
+            label={dict.dashboard.freshnessDataSource}
+            value={freshness.dataSource || dict.dashboard.unknown}
+          />
+        </div>
+      </DataCard>
+
+      {hasPortfolioData ? (
+        <>
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <MetricCard
+              title={dict.dashboard.metrics.holdingAmount}
+              value={<MoneyText value={summary.holdingAmount} compact />}
+            />
+            <MetricCard
+              title={dict.dashboard.metrics.costAmount}
+              value={<MoneyText value={summary.costAmount} compact />}
+            />
+            <MetricCard
+              title={dict.dashboard.metrics.estimatedProfit}
+              value={
+                <MoneyText value={summary.estimatedProfitAmount} compact />
+              }
+              trend={
+                <ChangeBadge
+                  value={summary.estimatedChangePct / 100}
+                  locale={lang}
+                />
+              }
+            />
+            <MetricCard
+              title={dict.dashboard.metrics.estimatedChange}
+              value={
+                <PercentText value={summary.estimatedChangePct / 100} signed />
+              }
+            />
+            <MetricCard
+              title={dict.dashboard.metrics.dailyInvestAmount}
+              value={<MoneyText value={summary.dailyInvestAmount} compact />}
+            />
+            <MetricCard
+              title={dict.dashboard.metrics.trackedFundCount}
+              value={summary.trackedFundCount}
+            />
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+            <DataCard
+              title={dict.dashboard.fundEstimatesTitle}
+              description={dict.dashboard.fundEstimatesDescription}
+            >
+              <FundEstimateTable
+                rows={fundRows}
+                lang={lang}
+                labels={dict.dashboard.table}
+                unknownLabel={dict.dashboard.unknown}
+              />
+            </DataCard>
+
+            <DataCard
+              title={dict.dashboard.chartTitle}
+              description={dict.dashboard.chartDescription}
+            >
+              <div className="flex min-h-64 items-center justify-center rounded-md border border-dashed bg-muted/20 text-sm text-muted-foreground">
+                {dict.dashboard.chartPlaceholder}
+              </div>
+            </DataCard>
+          </section>
+
+          <DataCard
+            title={dict.dashboard.topContributorsTitle}
+            description={dict.dashboard.topContributorsDescription}
+          >
+            <ContributionTable
+              rows={topContributors}
+              lang={lang}
+              labels={dict.dashboard.table}
+              unknownLabel={dict.dashboard.unknown}
+            />
+          </DataCard>
+        </>
+      ) : (
+        <EmptyState
+          title={dict.dashboard.emptyTitle}
+          description={dict.dashboard.emptyDescription}
           action={
             <Button
               nativeButton={false}
@@ -98,107 +208,7 @@ export default async function DashboardPage({
             </Button>
           }
         />
-
-        <RiskNotice
-          title={dict.riskNotice.title}
-          description={dict.riskNotice.description}
-        />
-
-        <DataCard
-          title={dict.dashboard.freshnessTitle}
-          description={dict.dashboard.freshnessDescription}
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <DashboardMeta
-              label={dict.dashboard.freshnessLastSyncedAt}
-              value={formatDateTime(freshness.lastSyncedAt, lang)}
-            />
-            <DashboardMeta
-              label={dict.dashboard.freshnessDataSource}
-              value={freshness.dataSource || dict.dashboard.unknown}
-            />
-          </div>
-        </DataCard>
-
-        {hasPortfolioData ? (
-          <>
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-              <MetricCard
-                title={dict.dashboard.metrics.holdingAmount}
-                value={<MoneyText value={summary.holdingAmount} compact />}
-              />
-              <MetricCard
-                title={dict.dashboard.metrics.costAmount}
-                value={<MoneyText value={summary.costAmount} compact />}
-              />
-              <MetricCard
-                title={dict.dashboard.metrics.estimatedProfit}
-                value={<MoneyText value={summary.estimatedProfitAmount} compact />}
-                trend={<ChangeBadge value={summary.estimatedChangePct / 100} />}
-              />
-              <MetricCard
-                title={dict.dashboard.metrics.estimatedChange}
-                value={<PercentText value={summary.estimatedChangePct / 100} signed />}
-              />
-              <MetricCard
-                title={dict.dashboard.metrics.dailyInvestAmount}
-                value={<MoneyText value={summary.dailyInvestAmount} compact />}
-              />
-              <MetricCard
-                title={dict.dashboard.metrics.trackedFundCount}
-                value={summary.trackedFundCount}
-              />
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-              <DataCard
-                title={dict.dashboard.fundEstimatesTitle}
-                description={dict.dashboard.fundEstimatesDescription}
-              >
-                <FundEstimateTable
-                  rows={fundRows}
-                  lang={lang}
-                  labels={dict.dashboard.table}
-                  unknownLabel={dict.dashboard.unknown}
-                />
-              </DataCard>
-
-              <DataCard
-                title={dict.dashboard.chartTitle}
-                description={dict.dashboard.chartDescription}
-              >
-                <div className="flex min-h-64 items-center justify-center rounded-md border border-dashed bg-muted/20 text-sm text-muted-foreground">
-                  {dict.dashboard.chartPlaceholder}
-                </div>
-              </DataCard>
-            </section>
-
-            <DataCard
-              title={dict.dashboard.topContributorsTitle}
-              description={dict.dashboard.topContributorsDescription}
-            >
-              <ContributionTable
-                rows={topContributors}
-                labels={dict.dashboard.table}
-                unknownLabel={dict.dashboard.unknown}
-              />
-            </DataCard>
-          </>
-        ) : (
-          <EmptyState
-            title={dict.dashboard.emptyTitle}
-            description={dict.dashboard.emptyDescription}
-            action={
-              <Button
-                nativeButton={false}
-                render={<PendingLink href={`/${lang}/funds`} />}
-              >
-                <Plus className="size-4" />
-                {dict.dashboard.addFund}
-              </Button>
-            }
-          />
-        )}
+      )}
     </div>
   )
 }
@@ -247,7 +257,7 @@ function FundEstimateTable({
               <MoneyText value={row.holdingAmount} />
             </TableCell>
             <TableCell className="text-right">
-              <ChangeBadge value={row.estimatedChangePct / 100} />
+              <ChangeBadge value={row.estimatedChangePct / 100} locale={lang} />
             </TableCell>
             <TableCell className="text-right">
               <MoneyText value={row.estimatedProfitAmount} />
@@ -271,10 +281,12 @@ function FundEstimateTable({
 
 function ContributionTable({
   rows,
+  lang,
   labels,
   unknownLabel,
 }: {
   rows: StockContributionRow[]
+  lang: string
   labels: ReturnType<typeof getDictionary>["dashboard"]["table"]
   unknownLabel: string
 }) {
@@ -310,7 +322,7 @@ function ContributionTable({
             </TableCell>
             <TableCell>{row.relatedFund}</TableCell>
             <TableCell className="text-right">
-              <ChangeBadge value={row.changePct / 100} />
+              <ChangeBadge value={row.changePct / 100} locale={lang} />
             </TableCell>
             <TableCell className="text-right">
               <PercentText value={row.contributionPct / 100} signed />
