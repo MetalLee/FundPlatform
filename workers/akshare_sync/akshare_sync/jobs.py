@@ -3,8 +3,9 @@
 import os
 import time
 from datetime import datetime
+import math
 import re
-from typing import Callable
+from typing import Any, Callable
 
 import requests
 import akshare as ak
@@ -27,6 +28,16 @@ AKSHARE_RETRY_ATTEMPTS = max(1, int(os.getenv("AKSHARE_RETRY_ATTEMPTS", "3")))
 AKSHARE_RETRY_BASE_DELAY_SECONDS = float(
     os.getenv("AKSHARE_RETRY_BASE_DELAY_SECONDS", "1.0")
 )
+US_QUOTE_PAGE_DELAY_SECONDS = float(
+    os.getenv("US_QUOTE_PAGE_DELAY_SECONDS", "0.5")
+)
+US_QUOTE_CONNECT_TIMEOUT_SECONDS = float(
+    os.getenv("US_QUOTE_CONNECT_TIMEOUT_SECONDS", "2")
+)
+US_QUOTE_READ_TIMEOUT_SECONDS = float(
+    os.getenv("US_QUOTE_READ_TIMEOUT_SECONDS", "3")
+)
+US_QUOTE_MAX_PAGES = max(0, int(os.getenv("US_QUOTE_MAX_PAGES", "0")))
 _ORIGINAL_REQUEST = requests.sessions.Session.request
 
 
@@ -357,11 +368,28 @@ def sync_fund_disclosures(client: SupabaseClient, fund_codes: list[str]) -> int:
     )
 
 def sync_market_quotes(client: SupabaseClient, market: str) -> int:
+    if market == "US":
+        item_count = 0
+
+        def upsert_round(df: pd.DataFrame) -> None:
+            nonlocal item_count
+            item_count += _upsert_market_quote_dataframe(client, market, df)
+
+        _fetch_us_quotes(on_round=upsert_round)
+        return item_count
+
     df = {
         "CN": ak.stock_zh_a_spot_em,
         "HK": ak.stock_hk_spot_em,
-        "US": ak.stock_us_spot_em,
     }[market]()
+    return _upsert_market_quote_dataframe(client, market, df)
+
+
+def _upsert_market_quote_dataframe(
+    client: SupabaseClient,
+    market: str,
+    df: pd.DataFrame,
+) -> int:
     synced_at = now_iso()
     rows: list[dict] = []
 
@@ -387,6 +415,157 @@ def sync_market_quotes(client: SupabaseClient, market: str) -> int:
         )
 
     return client.upsert("market_quotes", rows, "market,symbol")
+
+
+def _fetch_us_quotes(
+    request_get: Callable[..., requests.Response] = requests.get,
+    on_round: Callable[[pd.DataFrame], None] | None = None,
+) -> pd.DataFrame:
+    """Fetch EastMoney US quotes while retaining completed page progress."""
+    url = "https://72.push2.eastmoney.com/api/qt/clist/get"
+    base_params = {
+        "pn": "1",
+        "pz": "100",
+        "po": "1",
+        "np": "1",
+        "ut": "bd1d9ddb04089700cf9c27f6f7426281",
+        "fltt": "2",
+        "invt": "2",
+        "fid": "f12",
+        "fs": "m:105,m:106,m:107",
+        "fields": "f2,f3,f12,f13,f14,f18",
+    }
+    raw_rows: list[dict[str, Any]] = []
+    failed_pages: list[int] = []
+    configured_pages = [
+        int(item.strip())
+        for item in os.getenv("US_QUOTE_PAGES", "").split(",")
+        if item.strip()
+    ]
+
+    if configured_pages:
+        requested_pages = configured_pages
+        initial_pages = requested_pages
+    elif US_QUOTE_MAX_PAGES:
+        requested_pages = list(range(1, US_QUOTE_MAX_PAGES + 1))
+        initial_pages = requested_pages
+    else:
+        discovery_page = 1
+        while True:
+            params = {**base_params, "pn": str(discovery_page)}
+            try:
+                response = _get_us_quote_page(request_get, url, params)
+            except RequestException:
+                failed_pages.append(discovery_page)
+                discovery_page += 1
+                if discovery_page > 10:
+                    raise RuntimeError(
+                        "Unable to discover US quote page count after 10 pages"
+                    )
+                continue
+            data = response.json().get("data") or {}
+            raw_rows.extend(data.get("diff") or [])
+            total = int(data.get("total") or len(raw_rows))
+            total_pages = max(1, math.ceil(total / int(base_params["pz"])))
+            break
+        requested_pages = list(range(1, total_pages + 1))
+        initial_pages = requested_pages[discovery_page:]
+
+    for page_number in initial_pages:
+        params = {**base_params, "pn": str(page_number)}
+        try:
+            response = _get_us_quote_page(request_get, url, params)
+        except RequestException:
+            failed_pages.append(page_number)
+            continue
+        data = response.json().get("data") or {}
+        raw_rows.extend(data.get("diff") or [])
+        if US_QUOTE_PAGE_DELAY_SECONDS > 0:
+            time.sleep(US_QUOTE_PAGE_DELAY_SECONDS)
+
+    initial_row_count = len(raw_rows)
+    initial_frame = _us_quote_rows_to_dataframe(raw_rows[:initial_row_count])
+    if on_round:
+        on_round(initial_frame)
+    _print_us_quote_round_summary(1, requested_pages, failed_pages)
+
+    round_number = 2
+    while failed_pages:
+        retry_pages = failed_pages
+        failed_pages = []
+        round_rows: list[dict[str, Any]] = []
+        for page_number in retry_pages:
+            params = {**base_params, "pn": str(page_number)}
+            try:
+                response = _get_us_quote_page(request_get, url, params)
+            except RequestException:
+                failed_pages.append(page_number)
+                continue
+            data = response.json().get("data") or {}
+            page_rows = data.get("diff") or []
+            round_rows.extend(page_rows)
+            raw_rows.extend(page_rows)
+            if US_QUOTE_PAGE_DELAY_SECONDS > 0:
+                time.sleep(US_QUOTE_PAGE_DELAY_SECONDS)
+
+        round_frame = _us_quote_rows_to_dataframe(round_rows)
+        if on_round:
+            on_round(round_frame)
+        _print_us_quote_round_summary(round_number, retry_pages, failed_pages)
+        round_number += 1
+
+    return _us_quote_rows_to_dataframe(raw_rows)
+
+
+def _print_us_quote_round_summary(
+    round_number: int,
+    requested_pages: list[int],
+    failed_pages: list[int],
+) -> None:
+    failed_page_numbers = ",".join(str(item) for item in failed_pages) or "none"
+    print(
+        "US quote round summary: "
+        f"round={round_number} "
+        f"requested_pages={len(requested_pages)} "
+        f"successful_pages={len(requested_pages) - len(failed_pages)} "
+        f"failed_pages={len(failed_pages)} "
+        f"failed_page_numbers={failed_page_numbers}",
+        flush=True,
+    )
+
+
+def _us_quote_rows_to_dataframe(raw_rows: list[dict[str, Any]]) -> pd.DataFrame:
+    columns = ["代码", "名称", "最新价", "昨收", "涨跌幅"]
+    return pd.DataFrame(
+        [
+            {
+                "代码": f"{row.get('f13')}.{row.get('f12')}",
+                "名称": row.get("f14"),
+                "最新价": row.get("f2"),
+                "昨收": row.get("f18"),
+                "涨跌幅": row.get("f3"),
+            }
+            for row in raw_rows
+        ],
+        columns=columns,
+    )
+
+
+def _get_us_quote_page(
+    request_get: Callable[..., requests.Response],
+    url: str,
+    params: dict[str, str],
+) -> requests.Response:
+    response = request_get(
+        url,
+        params=params,
+        timeout=(
+            US_QUOTE_CONNECT_TIMEOUT_SECONDS,
+            US_QUOTE_READ_TIMEOUT_SECONDS,
+        ),
+    )
+    response.raise_for_status()
+    return response
 
 def recalculate_estimates(
     client: SupabaseClient,
@@ -502,12 +681,3 @@ def _safe_overview(fund_code: str) -> pd.DataFrame:
             f"fund_overview_em(fund={fund_code})",
             lambda: ak.fund_overview_em(fund=fund_code),
         )
-
-
-
-
-
-
-
-
-
